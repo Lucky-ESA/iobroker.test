@@ -1,0 +1,53 @@
+/*global systemDictionary:true */
+"use strict";
+
+systemDictionary = {
+    "test adapter settings": {
+        en: "Adapter settings for test",
+        de: "Adaptereinstellungen für test",
+        ru: "Настройки адаптера для test",
+        pt: "Configurações do adaptador para test",
+        nl: "Adapterinstellingen voor test",
+        fr: "Paramètres d'adaptateur pour test",
+        it: "Impostazioni dell'adattatore per test",
+        es: "Ajustes del adaptador para test",
+        pl: "Ustawienia adaptera dla test",
+        "zh-cn": "test的适配器设置",
+    },
+    "Server Username": {
+        en: "Username HTTP access",
+        de: "Benutzername HTTP Zugriff",
+        ru: "?????? ? ????? ???????????? ?? ????????? HTTP",
+        pt: "Acesso HTTP do nome de usu�rio",
+        nl: "Gebruikersnaam HTTP-toegang",
+        fr: "Nom d'utilisateur acc�s HTTP",
+        it: "Nome utente accesso HTTP",
+        es: "Nombre de usuario acceso HTTP",
+        pl: "Nazwa uzytkownika Dostep HTTP",
+        "zh-cn": "??? HTTP ??",
+    },
+    "Server Password": {
+        en: "Password HTTP access",
+        de: "Passwort HTTP Zugriff",
+        ru: "?????? ??????? HTTP",
+        pt: "Senha de acesso HTTP",
+        nl: "Wachtwoord HTTP-toegang",
+        fr: "Mot de passe acc�s HTTP",
+        it: "Password di accesso HTTP",
+        es: "Acceso HTTP con contrase�a",
+        pl: "Haslo dostepu HTTP",
+        "zh-cn": "?? HTTP ??",
+    },
+    "Server IP": {
+        en: "IP from the Pilight server",
+        de: "IP vom Pilight Server",
+        ru: "IP ? ??????? Pilight",
+        pt: "IP do servidor Pilight",
+        nl: "IP van de Pilight-server",
+        fr: "IP du serveur Pilight",
+        it: "IP dal server Pilight",
+        es: "IP del servidor Pilight",
+        pl: "IP z serwera Pilight",
+        "zh-cn": "?? Pilight ???? IP",
+    },
+};
