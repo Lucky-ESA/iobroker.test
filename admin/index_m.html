@@ -20,6 +20,13 @@
             function load(settings, onChange) {
                 // example: select elements with id=key and class=value and insert value
                 if (!settings) return;
+                if (settings.booster === undefined) settings.booster = 5;
+                if (settings.open === undefined) settings.open = 5;
+                if (settings.dect_int_sec === undefined) settings.dect_int_sec = 2;
+                if (settings.dect_int === undefined) settings.dect_int = 10;
+                if (settings.temp_int === undefined) settings.temp_int = 24;
+                if (settings.ssl === undefined) settings.ssl = false;
+                if (settings.extendForeign === undefined) settings.extendForeign = false;
                 $(".value").each(function () {
                     var $key = $(this);
                     var id = $key.attr("id");
@@ -61,7 +68,7 @@
         <div class="m adapter-container">
             <div class="row">
                 <div class="col s12 m4 l2">
-                    <img src="test.png" class="logo" />
+                    <img src="dect.png" class="logo" />
                     <p>
                         <span>test adapter settings</span>
                     </p>
@@ -87,6 +94,48 @@
                 <div class="col s6 input-field">
                     <input type="password" class="value" id="password" />
                     <label for="password" class="translate">Server Password</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s4 input-field">
+                    <input type="number" class="value" id="dect_int_sec" />
+                    <label for="dect_int_sec" class="translate">DECT Interval</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s4 input-field">
+                    <input type="number" class="value" id="dect_int" />
+                    <label for="dect_int" class="translate">DECT Interval ALL</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s4 input-field">
+                    <input type="number" class="value" id="temp_int" />
+                    <label for="temp_int" class="translate">TEMP Interval</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s4 input-field">
+                    <input type="number" class="value" id="booster" />
+                    <label for="booster" class="translate">Booster minutes</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s4 input-field">
+                    <input type="number" class="value" id="open" />
+                    <label for="open" class="translate">Open minutes</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s2 input-field">
+                    <input class="value" id="ssl" type="checkbox"/>
+                    <label for="ssl" class="translate">HTTPS SSL</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s2 input-field">
+                    <input class="value" id="extendForeign" type="checkbox"/>
+                    <label for="extendForeign" class="translate">Update Objects</label>
                 </div>
             </div>
         </div>
