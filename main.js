@@ -17,14 +17,14 @@ const { extractKeys } = require("./lib/extractKeys");
 const constants = require("./lib/constants");
 const { URL } = require("url");
 
-class Test extends utils.Adapter {
+class LgThinq extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "test",
+            name: "lg-thinq",
         });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
@@ -1039,16 +1039,18 @@ this.log.info(JSON.stringify(rawData.data));
                             case "WMStart":
                                 rawData = this.deviceControls[deviceId][action];
                                 dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
-                                const WMState = await this.getStateAsync(deviceId + ".snapshot.remote.WMDownload");
-                                if (this.CheckUndefined(WMState, "Course", deviceId)) {
+                                const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
+this.log.info(JSON.stringify(WMState));
+
+                                if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
                                      rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: WMState,
+                                        courseFL24inchBaseTitan: WMState.val,
                                         ...this.courseactual[deviceId],
                                     };
-                                } else if (this.CheckUndefined(WMState, "SmartCourse", deviceId)) {
+                                } else if (this.CheckUndefined(WMState.val, "SmartCourse", deviceId)) {
                                      rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][WMState].Course,
-                                        smartCourseFL24inchBaseTitan: WMState,
+                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][WMState.val].Course,
+                                        smartCourseFL24inchBaseTitan: WMState.val,
                                         ...this.courseactual[deviceId],
                                     };
                                 } else {
@@ -1195,8 +1197,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new Test(options);
+    module.exports = (options) => new LgThinq(options);
 } else {
     // otherwise start the instance directly
-    new Test();
+    new LgThinq();
 }
