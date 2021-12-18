@@ -1040,8 +1040,6 @@ this.log.info(JSON.stringify(rawData.data));
                                 rawData = this.deviceControls[deviceId][action];
                                 dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
                                 const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
-this.log.info(JSON.stringify(WMState));
-
                                 if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
                                      rawData.data[dev] = {
                                         courseFL24inchBaseTitan: WMState.val,
