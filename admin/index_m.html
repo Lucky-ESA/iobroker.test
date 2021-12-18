@@ -20,13 +20,6 @@
             function load(settings, onChange) {
                 // example: select elements with id=key and class=value and insert value
                 if (!settings) return;
-                if (settings.booster === undefined) settings.booster = 5;
-                if (settings.open === undefined) settings.open = 5;
-                if (settings.dect_int_sec === undefined) settings.dect_int_sec = 2;
-                if (settings.dect_int === undefined) settings.dect_int = 10;
-                if (settings.temp_int === undefined) settings.temp_int = 24;
-                if (settings.ssl === undefined) settings.ssl = false;
-                if (settings.extendForeign === undefined) settings.extendForeign = false;
                 $(".value").each(function () {
                     var $key = $(this);
                     var id = $key.attr("id");
@@ -68,10 +61,7 @@
         <div class="m adapter-container">
             <div class="row">
                 <div class="col s12 m4 l2">
-                    <img src="dect.png" class="logo" />
-                    <p>
-                        <span>test adapter settings</span>
-                    </p>
+                    <img src="lg-thinq.png" class="logo" />
                 </div>
             </div>
 
@@ -80,62 +70,52 @@
             <!-- For example columns with settings: -->
             <div class="row">
                 <div class="col s6 input-field">
-                    <input type="text" class="value" id="ip" />
-                    <label for="ip" class="translate">Server IP</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s6 input-field">
-                    <input type="text" class="value" id="username" />
-                    <label for="username" class="translate">Server Username</label>
+                    <input type="text" class="value" id="user" />
+                    <label for="user" class="translate">LG ThinQ Email</label>
                 </div>
             </div>
             <div class="row">
                 <div class="col s6 input-field">
                     <input type="password" class="value" id="password" />
-                    <label for="password" class="translate">Server Password</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s4 input-field">
-                    <input type="number" class="value" id="dect_int_sec" />
-                    <label for="dect_int_sec" class="translate">DECT Interval</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s4 input-field">
-                    <input type="number" class="value" id="dect_int" />
-                    <label for="dect_int" class="translate">DECT Interval ALL</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s4 input-field">
-                    <input type="number" class="value" id="temp_int" />
-                    <label for="temp_int" class="translate">TEMP Interval</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s4 input-field">
-                    <input type="number" class="value" id="booster" />
-                    <label for="booster" class="translate">Booster minutes</label>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col s4 input-field">
-                    <input type="number" class="value" id="open" />
-                    <label for="open" class="translate">Open minutes</label>
+                    <label for="password" class="translate">LG ThinQ Password</label>
                 </div>
             </div>
             <div class="row">
                 <div class="col s2 input-field">
-                    <input class="value" id="ssl" type="checkbox"/>
-                    <label for="ssl" class="translate">HTTPS SSL</label>
+                    <input type="number" class="value" id="interval" />
+                    <label for="interval" class="translate">Update interval in minutes</label>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col s6 input-field">
+                    <input type="text" class="value" id="country" />
+                    <label for="country" class="translate">Country</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s6 input-field">
+                    <input type="text" class="value" id="language" />
+                    <label for="language" class="translate">Language</label>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col s6 input-field">
+                    <input type="text" class="value" id="platform" />
+                    <label for="platform" class="translate">Platform</label>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col s6 input-field">
+                    <input type="text" class="value" id="devtype" />
+                    <label for="devtype" class="translate">Device Type</label>
                 </div>
             </div>
             <div class="row">
                 <div class="col s2 input-field">
-                    <input class="value" id="extendForeign" type="checkbox"/>
-                    <label for="extendForeign" class="translate">Update Objects</label>
+                    <input type="number" class="value" id="newinterval" />
+                    <label for="newinterval" class="translate">Update newinterval in seconds</label>
                 </div>
             </div>
         </div>
