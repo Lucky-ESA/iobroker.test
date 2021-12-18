@@ -80,9 +80,15 @@
     "password"
   ],
   "native": {
-    "ip": "",
-    "username": "",
-    "password": ""
+    "user": "",
+    "password": "",
+    "interval": 5,
+    "country": "DE",
+    "language": "de_DE",
+    "thinq1": false,
+    "platform": "LGThinQ",
+    "devtype": "201,202",
+    "newinterval": 10
   },
   "objects": [],
   "instanceObjects": [
