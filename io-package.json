@@ -86,9 +86,8 @@
     "country": "DE",
     "language": "de_DE",
     "thinq1": false,
-    "platform": "LGThinQ",
-    "devtype": "201,202",
-    "newinterval": 10
+    "platform": "LGThinQ"
+    "montime": 0
   },
   "objects": [],
   "instanceObjects": [
