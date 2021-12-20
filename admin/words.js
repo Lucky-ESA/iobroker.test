@@ -38,28 +38,16 @@ systemDictionary = {
         "pl": "Opcja 2",
         "zh-cn": "选项2"
     },
-    "Device Type": {
-        "en": "Enter the number from <yourdevice>.deviceType here. <yourdevice>.snapshot.washerDryer.state must be available.",
-        "de": "Geben Sie hier die Nummer aus <yourdevice>.deviceType ein. <yourdevice>.snapshot.washerDryer.state muss vorhanden sein.",
-        "ru": "Введите здесь номер из <yourdevice> .deviceType. <yourdevice> .snapshot.washerDryer.state должен быть доступен.",
-        "pt": "Insira o número de <yourdevice> .deviceType aqui. <yourdevice> .snapshot.washerDryer.state deve estar disponível.",
-        "nl": "Voer hier het nummer van <yourdevice>.deviceType in. <uw apparaat>.snapshot.washerDryer.state moet beschikbaar zijn.",
-        "fr": "Entrez le numéro de <votre appareil>.deviceType ici. <votre appareil>.snapshot.washerDryer.state doit être disponible.",
-        "it": "Inserisci qui il numero da <yourdevice>.deviceType. <yourdevice>.snapshot.washerDryer.state deve essere disponibile.",
-        "es": "Ingrese el número de <yourdevice> .deviceType aquí. <tudispositivo> .snapshot.washerDryer.state debe estar disponible.",
-        "pl": "Wprowadź numer z <twojeurządzenie>.deviceType tutaj. <twoje urządzenie>.snapshot.washerDryer.state musi być dostępny.",
-        "zh-cn": "在此处输入 <yourdevice>.deviceType 中的号码。 <您的设备>.snapshot.washerDryer.state 必须可用。"
-	},
-    "Update newinterval in seconds": {
-        "en": "Interval updates in seconds",
-        "de": "Intervall-Updates in Sekunden",
-        "ru": "???????? ?????????? ? ????????",
-        "pt": "Atualizações de intervalo em segundos",
-        "nl": "Intervalupdates in seconden",
-        "fr": "Intervalle de mises à jour en quelques secondes",
-        "it": "Aggiornamenti a intervalli in secondi",
-        "es": "Actualizaciones de intervalos en segundos",
-        "pl": "Aktualizacje interwalowe w kilka sekund",
-        "zh-cn": "??????????"
-    }
+    "Break Monitor in seconds": {
+        "en": "Break after monotoring update in seconds.",
+        "de": "Pause nach dem Monotoring-Update in Sekunden.",
+        "ru": "Перерыв после отслеживания обновления в секундах.",
+        "pt": "Interrompa após a atualização do monitoramento em segundos.",
+        "nl": "Pauze na monitoring-update in seconden.",
+        "fr": "Pause après la mise à jour de la surveillance en secondes.",
+        "it": "Pausa dopo un aggiornamento monotono in pochi secondi.",
+        "es": "Romper después de la actualización de monitoreo en segundos.",
+        "pl": "Przerwa po aktualizacji monitorowania w kilka sekund.",
+        "zh-cn": "在几秒钟内完成更新后中断。"
+	}
 };
