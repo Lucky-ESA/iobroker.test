@@ -40,17 +40,12 @@ class LgThinq extends utils.Adapter {
             this.log.info("Set interval to minimum 0.5");
             this.config.interval = 0.5;
         }
-        if (this.config.newinterval < 1) {
-            this.log.info("Set newinterval to minimum 1. New interval is 4 seconds!");
-            this.config.newinterval = 4;
-        }
 
-        this.oldinterval        = this.config.interval * 60;
-        this.config.interval    = this.config.interval * 60;
-        this.setinterval        = false;
-        this.stopinterval       = false;
-        this.adapterstart       = true;
-        this.courseload         = {};
+//Neu Anfang
+        this.monitoring        = false;
+        this.dev               = {};
+        this.dev["devID"]      = "NoDevice";
+//Neu Ende
 
         // @ts-ignore
         this.requestClient = axios.create();
@@ -60,9 +55,18 @@ class LgThinq extends utils.Adapter {
         this.auth = {};
         this.workIds = [];
         this.deviceControls = {};
+//Neu Anfang
         this.deviceJson = {};
         this.courseJson = {};
         this.courseactual = {};
+        this.lang = "de";
+        await this.getForeignObject("system.config", async (err, data) => {
+            if (data && data.common) {
+                if (data.common.language !== this.lang) this.lang = "en";
+            }
+        });
+        this.log.debug(this.lang);
+//Neu Ende
         this.extractKeys = extractKeys;
         this.subscribeStates("*");
         this.targetKeys = {};
@@ -85,7 +89,6 @@ class LgThinq extends utils.Adapter {
             "x-app-version": "3.5.1721",
             "x-message-id": this.random_string(22),
         };
-
         this.gateway = await this.requestClient
             .get(constants.GATEWAY_URL, { headers: this.defaultHeaders })
             .then((res) => res.data.result)
@@ -111,6 +114,59 @@ class LgThinq extends utils.Adapter {
                 const listDevices = await this.getListDevices();
 
                 this.log.info("Found: " + listDevices.length + " devices");
+//Neu Anfang
+                await this.setObjectNotExistsAsync("monitoringinfo", {
+                    type: "channel",
+                    common: {
+                        name: "Info ThinQ2 Monitoring",
+                        role: "state",
+                    },
+                    native: {},
+                });
+                await this.setObjectNotExists("monitoringinfo.last_update", {
+                    type: "state",
+                    common: {
+                        name: "Timestamp last update - ThinQ2",
+                        type: "number",
+                        role: "indicator.date",
+                        write: false,
+                        read: true,
+                    },
+                    native: {},
+                });
+                await this.setObjectNotExists("monitoringinfo.monitoring_active", {
+                    type: "state",
+                    common: {
+                        name: "Montitoring active - ThinQ2",
+                        type: "boolean",
+                        role: "indicator.state",
+                        write: false,
+                        read: true,
+                        def: false,
+                    },
+                    native: {},
+                });
+                await this.setStateAsync("monitoringinfo.monitoring_active", {
+                    val: false,
+                    ack: true
+                });
+                await this.setObjectNotExists("monitoringinfo.monitoring_deviceID", {
+                    type: "state",
+                    common: {
+                        name: "Montitoring deviceId - ThinQ2",
+                        type: "string",
+                        role: "indicator",
+                        write: false,
+                        read: true,
+                        def: "",
+                    },
+                    native: {},
+                });
+                await this.setStateAsync("monitoringinfo.monitoring_deviceID", {
+                    val: "",
+                    ack: true
+                });
+//Neu Ende
                 listDevices.forEach(async (element) => {
                     await this.setObjectNotExistsAsync(element.deviceId, {
                         type: "device",
@@ -128,63 +184,22 @@ class LgThinq extends utils.Adapter {
                 });
 
                 this.log.debug(JSON.stringify(listDevices));
-                this.NewInterval();
+                this.updateInterval = setInterval(async () => {
+                    await this.updateDevices();
+                }, this.config.interval * 60 * 1000);
             }
         }
     }
 
-    async NewInterval() {
-        this.updateInterval = setInterval(async () => {
-            if (this.stopinterval) {
-                this.stopinterval = false;
-                await clearInterval(this.updateInterval);
-                this.updateInterval = null;
-                this.NewInterval();
-            } else {
-                await this.updateDevices();
-            }
-        }, this.config.interval * 1000);
-    }
-
     async updateDevices() {
-        let listDevices = await this.getListDevices().catch((error) => {
+        const listDevices = await this.getListDevices().catch((error) => {
             this.log.error(error);
         });
-        let devID = "";
+
         listDevices.forEach(async (element) => {
-            if (element.deviceType) {
-                if (this.config.devtype.includes(element.deviceType) && this.config.newinterval > 0) {
-                    if (element["snapshot"]["washerDryer"]["state"] !== undefined) {
-                        if (element["snapshot"]["washerDryer"]["state"] !== "POWEROFF") {
-                            if (this.setinterval === false) {
-                                this.setinterval = true;
-                                this.config.interval = this.config.newinterval;
-                                this.stopinterval = true;
-                            }
-                        } else {
-                            if (this.setinterval) {
-                                this.setinterval = false;
-                                this.config.interval = this.oldinterval;
-                                this.stopinterval = true;
-                            }
-                        }
-                    }
-                }
-            }
-            if (this.adapterstart === false) {
-                await this.setStateAsync(element.deviceId + ".online", {
-                    val: element.snapshot.online,
-                    ack: true
-                });
-                devID = element.deviceId + ".snapshot";
-                element = element.snapshot;
-            } else {
-                devID = element.deviceId;
-            }
-            this.extractKeys(this, devID, element);
+            this.extractKeys(this, element.deviceId, element);
             this.pollMonitor(element);
         });
-        this.adapterstart = false;
         this.log.debug(JSON.stringify(listDevices));
     }
 
@@ -605,8 +620,9 @@ class LgThinq extends utils.Adapter {
                     controlWifi = deviceModel["ControlWifi"].action;
                 }
                 this.deviceControls[device.deviceId] = controlWifi;
+//Neu Anfang
                 this.deviceJson[device.deviceId] = deviceModel;
-
+//Neu Ende
                 const controlId = deviceModel["Info"].productType + "Control";
                 await this.setObjectNotExistsAsync(device.deviceId + ".remote", {
                     type: "channel",
@@ -616,6 +632,26 @@ class LgThinq extends utils.Adapter {
                     },
                     native: {},
                 });
+//Neu Anfang
+                await this.setObjectNotExists(device.deviceId + ".remote.Monitoring", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["MON_DEVICE"],
+                        type: "boolean",
+                        role: "switch",
+                        write: true,
+                        read: true,
+                        def: false,
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+                await this.setStateAsync(device.deviceId + ".remote.Monitoring", {
+                    val: false,
+                    ack: true
+                });
+//Neu Ende
                 if (deviceModel["Info"].productType === "REF") {
                     await this.setObjectNotExists(device.deviceId + ".remote.fridgeTemp", {
                         type: "state",
@@ -708,6 +744,7 @@ class LgThinq extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
+//Geändet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -724,12 +761,13 @@ class LgThinq extends utils.Adapter {
                                 });
                             }
                         });
+//Geändet Ende
                 }
             }
         }
         return deviceModel;
     }
-
+//Neu Anfang
     createremote(devicedp, control, course) {
         try {
             let states = {};
@@ -738,16 +776,16 @@ class LgThinq extends utils.Adapter {
             this.courseactual[devicedp] = {};
             if (control === "WMDownload") {
                 Object.keys(course["Course"]).forEach( async (value) => {
-                    states[value] = (constants["Translation"][value]) ? constants["Translation"][value] : "Unbekannt";
+                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
                 Object.keys(course["SmartCourse"]).forEach( async (value) => {
-                    states[value] = (constants["Translation"][value]) ? constants["Translation"][value] : "Unbekannt";
+                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
                 this.setObjectNotExists(devicedp + ".remote.Course", {
                     type: "channel",
                     common: {
-                        name: "Auswahl Programm",
-                        role: "value",
+                        name: constants[this.lang + "Translation"]["SEL_PROGRAM"],
+                        role: "state",
                     },
                     native: {},
                 }).catch((error) => {
@@ -767,6 +805,7 @@ class LgThinq extends utils.Adapter {
                 }).catch((error) => {
                     this.log.error(error);
                 });
+
                 let common = {};
                 dev = Object.keys(this.deviceControls[devicedp]["WMDownload"]["data"])[0];
                 dev = this.deviceControls[devicedp]["WMDownload"]["data"][dev];
@@ -786,10 +825,10 @@ class LgThinq extends utils.Adapter {
                                 common["type"] = "number";
                                 common["def"] = 0;
                             } else {
-                                states[map] = (constants["Translation"][map]) ? constants["Translation"][map] : states[map]["value"];
+                                states[map] = (constants[this.lang + "Translation"][map]) ? constants[this.lang + "Translation"][map] : states[map]["value"];
                             }
                         });
-                        common["name"] = (constants["Translation"][value]) ? constants["Translation"][value] : value;
+                        common["name"] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : value;
                         if (Object.keys(states).length > 0) common["states"] = states;
                         this.courseJson[devicedp][value] = dev[value];
                         this.courseactual[devicedp][value] = dev[value];
@@ -807,7 +846,7 @@ class LgThinq extends utils.Adapter {
             this.log.error("Error in valueinfolder: " + e);
         }
     }
-
+//Neu Ende
     extractValues(device) {
         const deviceModel = this.modelInfos[device.deviceId];
         if (deviceModel["MonitoringValue"] || deviceModel["Value"]) {
@@ -824,7 +863,9 @@ class LgThinq extends utils.Adapter {
             if (type) {
                 path = path + type + ".";
             }
-
+//Neu Start
+            const onlynumber = /^-?[0-9]+$/;
+//Neu Ende
             deviceModel["MonitoringValue"] &&
                 Object.keys(deviceModel["MonitoringValue"]).forEach((state) => {
                     this.getObject(path + state, async (err, obj) => {
@@ -837,7 +878,9 @@ class LgThinq extends utils.Adapter {
                         if (obj) {
                             common = obj.common;
                         }
-                        common.states = {};
+//Bug Empty States Anfang
+                        //common.states = {};
+//Bug Empty States Ende
                         if (deviceModel["MonitoringValue"][state]["targetKey"]) {
                             this.targetKeys[state] = [];
                             const firstKeyName = Object.keys(deviceModel["MonitoringValue"][state]["targetKey"])[0];
@@ -846,6 +889,20 @@ class LgThinq extends utils.Adapter {
                                 this.targetKeys[state].push(firstObject[targetKey]);
                             });
                         }
+//Bug States Anfang
+                        if (state === "courseFL24inchBaseTitan") {
+                            Object.keys(deviceModel["Course"]).forEach( async (key) => {
+                                common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                            });
+                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                        }
+                        if (state === "smartCourseFL24inchBaseTitan" ||
+                            state === "downloadedCourseFL24inchBaseTitan") {
+                                Object.keys(deviceModel["SmartCourse"]).forEach( async (key) => {
+                                    common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                                });
+                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                        }
                         if (deviceModel["MonitoringValue"][state]["valueMapping"]) {
                             if (deviceModel["MonitoringValue"][state]["valueMapping"].max) {
                                 common.min = 0; // deviceModel["MonitoringValue"][state]["valueMapping"].min; //reseverdhour has wrong value
@@ -853,12 +910,17 @@ class LgThinq extends utils.Adapter {
                             } else {
                                 const values = Object.keys(deviceModel["MonitoringValue"][state]["valueMapping"]);
                                 values.forEach((value) => {
-                                    if (deviceModel["MonitoringValue"][state]["valueMapping"][value].label) {
+                                    if (deviceModel["MonitoringValue"][state]["valueMapping"][value].label !== undefined) {
                                         const valueMap = deviceModel["MonitoringValue"][state]["valueMapping"][value];
-                                        common.states[valueMap.index] = valueMap.label;
+                                        if (onlynumber.test(value)) {
+                                            common.states[valueMap.index] = valueMap.label;
+                                        } else {
+                                            common.states[value] = valueMap.index;
+                                        }
                                     } else {
                                         common.states[value] = value;
                                     }
+//Bug States Ende
                                 });
                             }
                         }
@@ -928,7 +990,6 @@ class LgThinq extends utils.Adapter {
             command: "Set",
             ...values,
         };
-this.log.info(JSON.stringify(data));
         if (thinq1) {
             controlUrl = this.gateway.thinq1Uri + "/" + "rti/rtiControl";
             data = values;
@@ -949,7 +1010,6 @@ this.log.info(JSON.stringify(data));
      */
     onUnload(callback) {
         try {
-            clearInterval(this.SpeedupdateInterval)
             clearInterval(this.updateInterval);
             clearInterval(this.refreshTokenInterval);
             clearTimeout(this.refreshTimeout);
@@ -968,12 +1028,13 @@ this.log.info(JSON.stringify(data));
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
+//Geändert Anfang
                 const secsplit  = id.split('.')[id.split('.').length-2];
                 const lastsplit = id.split('.')[id.split('.').length-1];
                 const deviceId = id.split(".")[2];
                 if (secsplit === "Course") {
                     this.courseactual[deviceId][lastsplit] = state.val;
-this.log.info(JSON.stringify(this.courseactual[deviceId]));
+                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
                 return;
                 }
 
@@ -985,7 +1046,7 @@ this.log.info(JSON.stringify(this.courseactual[deviceId]));
                     let response = "";
                     let rawData  = {};
                     let dev      = "";
-                    if (["WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
+                    if (["Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
                         const dataTemp = await this.getStateAsync(deviceId + ".snapshot.refState.tempUnit");
                         switch (action) {
                             case "fridgeTemp":
@@ -1010,6 +1071,65 @@ this.log.info(JSON.stringify(this.courseactual[deviceId]));
                                 action = "basicCtrl";
                                 rawData.command = "Set";
                                 break;
+                            case "Monitoring":
+                                let folder = "nok";
+                                if (this.deviceJson[deviceId]["Config"]["targetRoot"] !== undefined) folder = this.deviceJson[deviceId]["Config"]["targetRoot"];
+                                if (folder === "nok") {
+                                    if (Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0] !== undefined) {
+                                        const wifi = Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0];
+                                        if (Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0] !== undefined) {
+                                            folder = Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0];
+                                        }
+                                    }
+                                }
+                                if (folder === "nok") {
+                                    this.log.warn("This device is not implemented");
+                                    this.setStateAsync(id, {val: false, ack: true});
+                                    return;
+                                }
+                                const objCount = await this.checkObject(this.namespace + "." + deviceId + ".snapshot." + folder);
+                                if (objCount === 0) {
+                                    this.log.error("Missing Folder: " + this.namespace + "." + deviceId + ".snapshot." + folder);
+                                    return;
+                                }
+                                if (state.val) {
+                                    if (this.monitoring) {
+                                        this.log.warn("Only one device is allowed. Actual Device: " + this.dev["devID"]);
+                                        await this.setStateAsync(id, {val: false, ack: true});
+                                    } else if (this.dev["devID"] === "NoDevice") {
+                                        this.monitoring = state.val;
+                                        this.dev["devID"] = deviceId;
+                                        this.log.info("Start device monitoring with DeviceID " + deviceId);
+                                        this.dev["Monitor"] = {};
+                                        this.deviceMonitor(deviceId, folder);
+                                        await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: deviceId, ack: true});
+                                        await this.setStateAsync("monitoringinfo.monitoring_active", {val: true, ack: true});
+                                    } else {
+                                        this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
+                                        await this.setStateAsync(id, {val: false, ack: true});
+                                    }
+                                } else { 
+                                    if (this.monitoring) {
+                                        if (this.dev["devID"] !== deviceId && this.dev["devID"] !== "NoDevice") {
+                                            this.log.warn("Please stop monitoring in device " + this.dev["devID"]);
+                                        } else if (this.dev["devID"] === deviceId) {
+                                            this.log.info("Stop monitoring device " + this.dev["devID"]);
+                                            this.dev["devID"] = "NoDevice";
+                                            this.dev["Monitor"] = {};
+                                            this.monitoring = state.val;
+                                            await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: "", ack: true});
+                                            await this.setStateAsync("monitoringinfo.monitoring_active", {val: false, ack: true});
+
+                                        } else {
+                                            this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
+                                        }
+                                    } else {
+                                        this.log.warn("Cannot find any current watch.");
+                                        this.dev["devID"] = "NoDevice";
+                                    }
+                                }
+                                return;
+                                break;
                             case "WMDownload":
                                 if (this.CheckUndefined(state.val, "Course", deviceId)) {
                                     this.InsertCourse(state.val, deviceId);
@@ -1029,7 +1149,6 @@ this.log.info(JSON.stringify(this.courseactual[deviceId]));
                                         downloadedCourseFL24inchBaseTitan: state.val,
                                         ...this.courseactual[deviceId],
                                     };
-this.log.info(JSON.stringify(rawData.data));
                                     this.InsertCourse(state.val, deviceId);
                                 } else {
                                     this.log.warn("Command " + action + " and value " + state.val + " not found");
@@ -1055,7 +1174,6 @@ this.log.info(JSON.stringify(rawData.data));
                                     this.log.warn("Command " + action + " and value " + state.val + " not found");
                                     return;
                                 }
-this.log.info(JSON.stringify(rawData.data));
                                 break;
                             default:
                                 this.log.info("Command " + action + " not found");
@@ -1069,14 +1187,15 @@ this.log.info(JSON.stringify(rawData.data));
                     }
 
                     data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-
+//Geändert Ende
                     if (action === "WMStop" || action === "WMOff") {
                         data.ctrlKey = "WMControl";
                     }
 
                     this.log.debug(JSON.stringify(data));
-
+//Geändert Anfang
                     if (data.dataSetList && nofor) {
+//Geändert Ende
                         const type = Object.keys(data.dataSetList)[0];
                         if (type) {
                             for (const dataElement of Object.keys(data.dataSetList[type])) {
@@ -1092,9 +1211,6 @@ this.log.info(JSON.stringify(rawData.data));
                     if (data.command && data.dataSetList) {
                         this.log.debug(JSON.stringify(data));
                         response = await this.sendCommandToDevice(deviceId, data);
-
-this.log.info(JSON.stringify(response));
-
                     } else {
                         rawData.value = rawData.value.replace("{Operation}", state.val ? "Start" : "Stop");
                         data = {
@@ -1146,7 +1262,7 @@ this.log.info(JSON.stringify(response));
             }
         }
     }
-
+//Neu Anfang
     InsertCourse(state, device) {
         try {
             Object.keys(this.courseJson[device]).forEach( async (value) => {
@@ -1188,6 +1304,52 @@ this.log.info(JSON.stringify(response));
             return false;
         }
     }
+
+    async deviceMonitor(devId, folder) {
+        if (this.monitoring === false) return;
+        try {
+            const valuefolder = await this.getDeviceInfo(devId);
+            if (valuefolder !== undefined) {
+                this.log.debug(JSON.stringify(valuefolder["snapshot"][folder]));
+                if (JSON.stringify(valuefolder["snapshot"][folder]) === JSON.stringify(this.dev["Monitor"])) {
+                    this.log.debug("equal");
+                } else {
+                    this.log.debug("unequal");
+                    this.dev["Monitor"] = valuefolder["snapshot"][folder];
+                    for (const value of Object.keys(valuefolder["snapshot"][folder])) {
+                        await this.setStateAsync(devId + ".snapshot." + folder + "." + value, {
+                            val: valuefolder["snapshot"][folder][value],
+                            ack: true
+                        });
+                    }
+                }
+            }
+            await this.setStateAsync("monitoringinfo.last_update", {
+                val: Math.floor(new Date()),
+                ack: true
+            });
+            await this.sleep(this.config.montime * 1000);
+            this.deviceMonitor(devId, folder);
+        } catch (e) {
+            this.log.error("deviceMonitor: " + valuefolder + " - Error: " + e);
+            await this.sleep(this.config.montime * 1000);
+            this.deviceMonitor(devId, folder);
+        }
+    }
+
+    checkObject(channel) {
+        return new Promise(resolve => {
+            this.getForeignObjects(channel + '.*',(err, obj) => {
+                if (err) {
+                    this.log.debug("Read Object: " + err);
+                    resolve(0);
+                } else {
+                    resolve(Object.keys(obj).length);
+                }
+            });
+        });
+    }
+//Neu Ende
 }
 
 if (require.main !== module) {
