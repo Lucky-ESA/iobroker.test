@@ -16,15 +16,18 @@ const { DateTime } = require("luxon");
 const { extractKeys } = require("./lib/extractKeys");
 const constants = require("./lib/constants");
 const { URL } = require("url");
+//Neu Anfang
+var dateFormat = require('dateformat');
+//Neu Ende
 
-class Test extends utils.Adapter {
+class LgThinq extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "test",
+            name: "lg-thinq",
         });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
@@ -102,12 +105,20 @@ class Test extends utils.Adapter {
                 this.log.error(error);
             });
             if (this.session && this.session.access_token) {
+//Vor Ablauf erneuern Anfang
+                this.session.expires_in = this.session.expires_in - 60;
+//Vor Ablauf erneuern Ende
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-                this.refreshTokenInterval = setInterval(() => {
-                    this.refreshNewToken();
-                }, this.session.expires_in * 1000);
+//Bitte löschen Anfang
+                //this.refreshTokenInterval = setInterval(() => {
+                //    this.refreshNewToken();
+                //}, this.session.expires_in * 1000);
+//Bitte löschen Ende
+//Neu Anfang
+                this.newrefreshTokenInterval(this.session.expires_in);
+//Neu Ende
                 this.userNumber = await this.getUserNumber();
                 this.defaultHeaders["x-user-no"] = this.userNumber;
                 this.defaultHeaders["x-emp-token"] = this.session.access_token;
@@ -189,6 +200,12 @@ class Test extends utils.Adapter {
                 }, this.config.interval * 60 * 1000);
             }
         }
+    }
+
+    async newrefreshTokenInterval(times) {
+        this.refreshTokenInterval = setInterval(() => {
+            this.refreshNewToken();
+        }, times * 1000);
     }
 
     async updateDevices() {
@@ -397,6 +414,11 @@ class Test extends utils.Adapter {
         if (this.session) {
             this.session.access_token = resp.access_token;
             this.defaultHeaders["x-emp-token"] = this.session.access_token;
+//Neu set new interval Anfang
+            this.session.expires_in = resp.expires_in - 60;
+            clearInterval(this.refreshTokenInterval);
+            this.newrefreshTokenInterval(this.session.expires_in);
+//Neu set new interval Ende
         }
     }
 
@@ -532,7 +554,40 @@ class Test extends utils.Adapter {
             .get(deviceUrl, { headers })
             .then((res) => res.data.result)
             .catch((error) => {
-                this.log.error(error);
+                this.log.error("getDeviceInfo: " + error);
+                if (error.response && error.response.status === 400) {
+                    this.log.info("Try to refresh Token");
+                    this.refreshNewToken();
+                }
+            });
+    }
+
+    async getDeviceEnergy(path) {
+        const headers = this.defaultHeaders;
+        const deviceUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", path);
+//service/laundry/"+e.product.id+"/courses/used
+//service/laundry/"+e.product.id+"/courses/"+r+"/favorite - POST
+//service/laundry/"+c.product.id+"/courses/favorite  {"item":[{"courseId":"DUVET","date":"20211215110248","courseType":null,"param1":"","param2":null}]}
+//service/laundry/"+e.product.id+"/energy-history?type=period&period="+(n||"month")+"&startDate="+r+"&endDate="+t
+//service/laundry/"+e.product.id+"/energy-history?type=period&period=day&startDate=2021-12-01&endDate=2021-12-31
+//service/laundry/"+e.product.id+"/energy-history?type=count&count="+t+"&washerType="+(o=o||"M")+"&sorting="+r {"count":0,"power":0,"energyWater":0,"energyDetergent":0,"energySoftener":0,"powerWh":0,"periodicEnergyData":0,"item":[{"timestamp":"1639913066652","courseSpendPower":"1","smartCourseFL24inchBaseTitan":"NOT_SELECTED","periodicEnergyData":"1","temp":"TEMP_30","courseFL24inchBaseTitan":"COTTON","spin":"SPIN_1600","rinse":"RINSE_NORMAL","dryLevel":"NOT_SELECTED","soilWash":"SOILWASH_NORMAL"}]}
+//service/users/push/config
+//service/users/push/config?deviceId="+e.product.id
+//service/users/push/send
+//service/devices/"+e.product.id+"/config
+//service/devices/"+e.product.id+"/network-status
+//service/devices/"+e.product.id+"/firmware
+//service/devices/"+e.product.id
+
+        return this.requestClient
+            .get(deviceUrl, { headers })
+            .then((res) => res.data.result)
+            .catch((error) => {
+                this.log.error("getDeviceEnergy: " + error);
+                if (error.response && error.response.status === 400) {
+                    this.log.info("Try to refresh Token");
+                    //this.refreshNewToken();
+                }
             });
     }
 
@@ -732,7 +787,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht fÃ¯Â¿Â½r alle verfÃ¯Â¿Â½gbar",
+                            desc: "Umweltfreundlich. Nicht fï¿½r alle verfï¿½gbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -744,7 +799,7 @@ class Test extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//GeÃ¤ndet Anfang
+//Geändet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -761,7 +816,7 @@ class Test extends utils.Adapter {
                                 });
                             }
                         });
-//GeÃ¤ndet Ende
+//Geändet Ende
                 }
             }
         }
@@ -775,6 +830,7 @@ class Test extends utils.Adapter {
             this.courseJson[devicedp] = {};
             this.courseactual[devicedp] = {};
             if (control === "WMDownload") {
+                this.lastDeviceCourse(devicedp);
                 Object.keys(course["Course"]).forEach( async (value) => {
                     states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
@@ -791,15 +847,102 @@ class Test extends utils.Adapter {
                 }).catch((error) => {
                     this.log.error(error);
                 });
-                this.setObjectNotExists(devicedp + ".remote." + control, {
+                this.setObjectNotExists(devicedp + ".remote.Statistic", {
+                    type: "channel",
+                    common: {
+                        name: constants[this.lang + "Translation"]["STATISTIC"],
+                        role: "state",
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Favorite", {
                     type: "state",
                     common: {
-                        name: control,
+                        name: constants[this.lang + "Translation"]["FAVORITE"],
+                        type: "boolean",
+                        role: "button",
+                        write: true,
+                        read: true,
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Statistic.period", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["PERIOD"],
+                        type: "number",
+                        role: "value",
+                        write: true,
+                        read: true,
+                        def: 0,
+                        states: {
+                            "0": constants[this.lang + "Translation"]["DAILY"],
+                            "1": constants[this.lang + "Translation"]["MONTHLY"],
+                            "2": constants[this.lang + "Translation"]["YEARLY"],
+                        },
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Statistic.startDate", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["STARTDATE"],
                         type: "string",
                         role: "value",
                         write: true,
                         read: true,
-                        states: states,
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Statistic.endDate", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["ENDDATE"],
+                        type: "string",
+                        role: "value",
+                        write: true,
+                        read: true,
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Statistic.jsonResult", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["JSONRESULT"],
+                        type: "string",
+                        role: "value",
+                        write: false,
+                        read: true,
+                    },
+                    native: {},
+                }).catch((error) => {
+                    this.log.error(error);
+                });
+
+                this.setObjectNotExists(devicedp + ".remote.Statistic.sendRequest", {
+                    type: "state",
+                    common: {
+                        name: constants[this.lang + "Translation"]["SENDREQUEST"],
+                        type: "boolean",
+                        role: "button",
+                        write: true,
+                        read: true,
+                        def: false,
                     },
                     native: {},
                 }).catch((error) => {
@@ -846,7 +989,71 @@ class Test extends utils.Adapter {
             this.log.error("Error in valueinfolder: " + e);
         }
     }
+
+    async lastDeviceCourse(devId) {
+        try {
+            const devtype = await this.getStateAsync(devId + ".deviceType");
+            const datacourse = await this.getDeviceEnergy("service/laundry/" + devId + "/energy-history?type=count&count=10&washerType=" + devtype + "&sorting=Y");
+            if (datacourse !== undefined && Object.keys(datacourse["item"]).length > 0) {
+                let states = {};
+                let count  = 0;
+                let name   = "";
+                let startdate = "";
+                let common = {
+                    name: constants[this.lang + "Translation"]["LASTCOURSE"],
+                    type: "number",
+                    role: "value",
+                    write: true,
+                    read: true,
+                    def: 0,
+                };
+                for (const items of Object.keys(datacourse["item"])) {
+                    ++count;
+                    name = null;
+                    Object.keys(datacourse["item"][items]).forEach( async (keys) => {
+                        if (keys === "timestamp") {
+                            if (this.lang === "de") {
+                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-MM-dd HH:MM:ss");
+                            } else {
+                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-mm-dd h:MM:ss  TT");
+                            }
+                            states[count] = startdate;
+                        }
+                        if (keys === "courseFL24inchBaseTitan") {
+                            if (name === null)
+                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                        }
+                        if (keys === "smartCourseFL24inchBaseTitan") {
+                            if (datacourse["item"][items][keys] !== "NOT_SELECTED")
+                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                        }
+                    });
+                    states[count] += " - " +  name;
+                }
+                states["0"] = "NOT_SELECTED";
+                common["desc"] = datacourse["item"];
+                common["states"] = states;
+                await this.setObjectNotExistsAsync(devId + ".remote.LastCourse", {
+                    type: "state",
+                    common: common,
+                    native: {},
+                    })
+                    .catch((error) => {
+                        this.log.error("LastCourse: " + error);
+                });
+                this.extendObject(devId + ".remote.LastCourse", {
+                    common: common,
+                });
+                this.log.debug(JSON.stringify(states));
+            } else {
+                this.log.info("Not found washes!");
+            }
+        } catch (e) {
+            this.log.error("lastDeviceCourse: " + JSON.stringify(datacourse) + " - Error: " + e);
+        }
+    }
 //Neu Ende
+
     extractValues(device) {
         const deviceModel = this.modelInfos[device.deviceId];
         if (deviceModel["MonitoringValue"] || deviceModel["Value"]) {
@@ -1028,14 +1235,20 @@ class Test extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//GeÃ¤ndert Anfang
+//Geändert Anfang
                 const secsplit  = id.split('.')[id.split('.').length-2];
                 const lastsplit = id.split('.')[id.split('.').length-1];
                 const deviceId = id.split(".")[2];
                 if (secsplit === "Course") {
                     this.courseactual[deviceId][lastsplit] = state.val;
                     this.log.debug(JSON.stringify(this.courseactual[deviceId]));
-                return;
+                    return;
+                }
+
+                if (secsplit === "Statistic") {
+                    this.sendStaticRequest(id, deviceId);
+                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
+                    return;
                 }
 
                 if (id.indexOf(".remote.") !== -1) {
@@ -1046,7 +1259,7 @@ class Test extends utils.Adapter {
                     let response = "";
                     let rawData  = {};
                     let dev      = "";
-                    if (["Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
+                    if (["LastCourse", "Favorite", "Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
                         const dataTemp = await this.getStateAsync(deviceId + ".snapshot.refState.tempUnit");
                         switch (action) {
                             case "fridgeTemp":
@@ -1070,6 +1283,14 @@ class Test extends utils.Adapter {
                                 rawData.data = { refState: { ecoFriendly: onoff, tempUnit: dataTemp.val } };
                                 action = "basicCtrl";
                                 rawData.command = "Set";
+                                break;
+                            case "LastCourse":
+                                this.setCourse(id, deviceId, state);
+                                return;
+                                break;
+                            case "Favorite":
+                                this.setFavoriteCourse(deviceId);
+                                return;
                                 break;
                             case "Monitoring":
                                 let folder = "nok";
@@ -1159,6 +1380,9 @@ class Test extends utils.Adapter {
                                 rawData = this.deviceControls[deviceId][action];
                                 dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
                                 const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
+                                if (JSON.stringify(WMState) === null || WMState === undefined) {
+                                     this.log.warn("Datapoint MWDownload is empty!");
+                                }
                                 if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
                                      rawData.data[dev] = {
                                         courseFL24inchBaseTitan: WMState.val,
@@ -1187,15 +1411,15 @@ class Test extends utils.Adapter {
                     }
 
                     data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//GeÃ¤ndert Ende
+//Geändert Ende
                     if (action === "WMStop" || action === "WMOff") {
                         data.ctrlKey = "WMControl";
                     }
 
                     this.log.debug(JSON.stringify(data));
-//GeÃ¤ndert Anfang
+//Geändert Anfang
                     if (data.dataSetList && nofor) {
-//GeÃ¤ndert Ende
+//Geändert Ende
                         const type = Object.keys(data.dataSetList)[0];
                         if (type) {
                             for (const dataElement of Object.keys(data.dataSetList[type])) {
@@ -1263,6 +1487,122 @@ class Test extends utils.Adapter {
         }
     }
 //Neu Anfang
+    async sendStaticRequest(id, device) {
+        try {
+            const period = await this.getStateAsync(device + ".remote.Statistic.period");
+            let startD = await this.getStateAsync(device + ".remote.Statistic.startDate");
+            let endD   = await this.getStateAsync(device + ".remote.Statistic.endDate");
+            let per = "day";
+            if (!this.checkdate(startD) || !this.checkdate(endD)) {
+                this.log.warn("Wrong date: Start: " + startD.val + " End: " + endD.val);
+            }
+            startD = this.checkdate(startD);
+            endD = this.checkdate(endD);
+            if (period === 1) per = "month";
+            else if (period === 2) per = "year";
+            this.log.debug("START " + startD);
+            this.log.debug("END " + endD);
+            this.log.debug(JSON.stringify(per));
+            const statistic = await this.getDeviceEnergy("service/laundry/" + device + "/energy-history?type=period&period=" + per + "&startDate=" + startD + "&endDate=" + endD);
+            if (statistic !== undefined) {
+                this.log.debug(JSON.stringify(statistic));
+                await this.setStateAsync(device + ".remote.Statistic.jsonResult", {
+                    val: JSON.stringify(statistic),
+                    ack: true
+                });
+            }
+        } catch (e) {
+            this.log.error("Error in sendStaticRequest: " + e);
+        }
+    }
+
+    checkdate(value) {
+        const onlynumber = /^-?[0-9]+$/;
+        if (value.val === undefined) return false;
+        let checkd = value.val.split(".");
+        if (Object.keys(checkd).length !== 3) return false;
+        if (checkd[0].toString().length !== 4  || !onlynumber.test(checkd[0])) return false;
+        if (!onlynumber.test(checkd[1])) return false;
+        if (checkd[1].toString().length !== 2) {
+            if (checkd[1].toString().length === 1) {
+                checkd[1] = "0" + checkd[1];
+            } else {
+                return false;
+            }
+        }
+        if (!onlynumber.test(checkd[2])) return false;
+        if (checkd[2].toString().length !== 2) {
+            if (checkd[2].toString().length === 1) {
+                checkd[2] = "0" + checkd[1];
+            } else {
+                return false;
+            }
+        }
+        return checkd[0] + "-" + checkd[1] + "-" + checkd[2]
+    }
+
+    async setFavoriteCourse(device) {
+        try {
+            const favcourse = await this.getDeviceEnergy("service/laundry/" + device + "/courses/favorite");
+            if (favcourse !== undefined && Object.keys(favcourse["item"]).length > 0) {
+                const isonline = await this.getStateAsync(device + ".snapshot.online");
+                if (isonline !== undefined) {
+                    if (isonline.val) {
+                        if (favcourse["item"]["courseId"] !== undefined) {
+                            await this.setStateAsync(device + ".remote.WMDownload", {val: favcourse["item"]["courseId"], ack: false});
+                            this.log.info("Set Favorite: " + (constants[this.lang + "Translation"][favcourse["item"]["courseId"]]) ? constants[this.lang + "Translation"][favcourse["item"]["courseId"]] : favcourse["item"]["courseId"]);
+                        }
+                    }
+                }
+            } else {
+                this.log.error("No favorite set.");
+            }
+        } catch (e) {
+            this.log.error("Error in setFavoriteCourse: " + e);
+        }
+    }
+
+    async setCourse(id, device, state) {
+        try {
+            this.getForeignObject(id, async (err, obj) => {
+                if (obj) {
+                    const rawstring = obj.common.desc;
+                    this.log.debug(JSON.stringify(rawstring) + " State: " + state.val);
+                    if (Array.isArray(rawstring) && Object.keys(rawstring).length > 0) {
+                        const rawselect = rawstring[state.val];
+                        this.log.debug(JSON.stringify(rawstring) + " State: " + state.val);
+                        if (rawselect.smartCourseFL24inchBaseTitan !== "NOT_SELECTED") {
+                            await this.setStateAsync(device + ".remote.WMDownload", {
+                                val: rawselect.smartCourseFL24inchBaseTitan,
+                                ack: false
+                            });
+                            await this.sleep(1000);
+                        } else {
+                            await this.setStateAsync(device + ".remote.WMDownload", {
+                                val: rawselect.courseFL24inchBaseTitan,
+                                ack: false
+                            });
+                            await this.sleep(1000);
+                        }
+                        Object.keys(rawselect).forEach( async (value) => {
+                            await this.getForeignObject(this.namespace + "." + device + ".remote.Course." + value, async (err, obj) => {
+                                if (obj) {
+                                    await this.setStateAsync(device + ".remote.Course." + value, {
+                                        val: rawselect[value],
+                                        ack: false
+                                    });
+                                    await this.sleep(200);
+                                }
+                            });
+                        });
+                    }
+                }
+            });
+        } catch (e) {
+            this.log.error("Error in setCourse: " + e);
+        }
+    }
+
     InsertCourse(state, device) {
         try {
             Object.keys(this.courseJson[device]).forEach( async (value) => {
@@ -1323,6 +1663,8 @@ class Test extends utils.Adapter {
                         });
                     }
                 }
+            } else {
+                await this.sleep(4000);
             }
             await this.setStateAsync("monitoringinfo.last_update", {
                 val: Math.floor(new Date()),
@@ -1331,7 +1673,7 @@ class Test extends utils.Adapter {
             await this.sleep(this.config.montime * 1000);
             this.deviceMonitor(devId, folder);
         } catch (e) {
-            this.log.error("deviceMonitor: " + valuefolder + " - Error: " + e);
+            this.log.error("deviceMonitor: " + JSON.stringify(valuefolder) + " - Error: " + e);
             await this.sleep(this.config.montime * 1000);
             this.deviceMonitor(devId, folder);
         }
@@ -1357,8 +1699,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new Test(options);
+    module.exports = (options) => new LgThinq(options);
 } else {
     // otherwise start the instance directly
-    new Test();
+    new LgThinq();
 }
