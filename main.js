@@ -17,7 +17,7 @@ const { extractKeys } = require("./lib/extractKeys");
 const constants = require("./lib/constants");
 const { URL } = require("url");
 //Neu Anfang
-var dateFormat = require('dateformat');
+const dateFormat = require('dateformat');
 //Neu Ende
 
 class LgThinq extends utils.Adapter {
@@ -565,19 +565,6 @@ class LgThinq extends utils.Adapter {
     async getDeviceEnergy(path) {
         const headers = this.defaultHeaders;
         const deviceUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", path);
-//service/laundry/"+e.product.id+"/courses/used
-//service/laundry/"+e.product.id+"/courses/"+r+"/favorite - POST
-//service/laundry/"+c.product.id+"/courses/favorite  {"item":[{"courseId":"DUVET","date":"20211215110248","courseType":null,"param1":"","param2":null}]}
-//service/laundry/"+e.product.id+"/energy-history?type=period&period="+(n||"month")+"&startDate="+r+"&endDate="+t
-//service/laundry/"+e.product.id+"/energy-history?type=period&period=day&startDate=2021-12-01&endDate=2021-12-31
-//service/laundry/"+e.product.id+"/energy-history?type=count&count="+t+"&washerType="+(o=o||"M")+"&sorting="+r {"count":0,"power":0,"energyWater":0,"energyDetergent":0,"energySoftener":0,"powerWh":0,"periodicEnergyData":0,"item":[{"timestamp":"1639913066652","courseSpendPower":"1","smartCourseFL24inchBaseTitan":"NOT_SELECTED","periodicEnergyData":"1","temp":"TEMP_30","courseFL24inchBaseTitan":"COTTON","spin":"SPIN_1600","rinse":"RINSE_NORMAL","dryLevel":"NOT_SELECTED","soilWash":"SOILWASH_NORMAL"}]}
-//service/users/push/config
-//service/users/push/config?deviceId="+e.product.id
-//service/users/push/send
-//service/devices/"+e.product.id+"/config
-//service/devices/"+e.product.id+"/network-status
-//service/devices/"+e.product.id+"/firmware
-//service/devices/"+e.product.id
 
         return this.requestClient
             .get(deviceUrl, { headers })
@@ -708,6 +695,9 @@ class LgThinq extends utils.Adapter {
                 });
 //Neu Ende
                 if (deviceModel["Info"].productType === "REF") {
+//Neu Anfang
+                    this.createStatistic(device.deviceId, 101);
+//Neu Ende
                     await this.setObjectNotExists(device.deviceId + ".remote.fridgeTemp", {
                         type: "state",
                         common: {
@@ -847,16 +837,8 @@ class LgThinq extends utils.Adapter {
                 }).catch((error) => {
                     this.log.error(error);
                 });
-                this.setObjectNotExists(devicedp + ".remote.Statistic", {
-                    type: "channel",
-                    common: {
-                        name: constants[this.lang + "Translation"]["STATISTIC"],
-                        role: "state",
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
+
+                this.createStatistic(devicedp);
 
                 this.setObjectNotExists(devicedp + ".remote.Favorite", {
                     type: "state",
@@ -866,83 +848,6 @@ class LgThinq extends utils.Adapter {
                         role: "button",
                         write: true,
                         read: true,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                this.setObjectNotExists(devicedp + ".remote.Statistic.period", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["PERIOD"],
-                        type: "number",
-                        role: "value",
-                        write: true,
-                        read: true,
-                        def: 0,
-                        states: {
-                            "0": constants[this.lang + "Translation"]["DAILY"],
-                            "1": constants[this.lang + "Translation"]["MONTHLY"],
-                            "2": constants[this.lang + "Translation"]["YEARLY"],
-                        },
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                this.setObjectNotExists(devicedp + ".remote.Statistic.startDate", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["STARTDATE"],
-                        type: "string",
-                        role: "value",
-                        write: true,
-                        read: true,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                this.setObjectNotExists(devicedp + ".remote.Statistic.endDate", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["ENDDATE"],
-                        type: "string",
-                        role: "value",
-                        write: true,
-                        read: true,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                this.setObjectNotExists(devicedp + ".remote.Statistic.jsonResult", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["JSONRESULT"],
-                        type: "string",
-                        role: "value",
-                        write: false,
-                        read: true,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                this.setObjectNotExists(devicedp + ".remote.Statistic.sendRequest", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["SENDREQUEST"],
-                        type: "boolean",
-                        role: "button",
-                        write: true,
-                        read: true,
-                        def: false,
                     },
                     native: {},
                 }).catch((error) => {
@@ -990,6 +895,121 @@ class LgThinq extends utils.Adapter {
         }
     }
 
+    async createStatistic(devicedp, fridge) {
+        await this.setObjectNotExists(devicedp + ".remote.Statistic", {
+            type: "channel",
+            common: {
+                name: constants[this.lang + "Translation"]["STATISTIC"],
+                role: "state",
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+        if (fridge === 101) {
+            this.setObjectNotExists(devicedp + ".remote.Statistic.command", {
+                type: "state",
+                common: {
+                    name: constants[this.lang + "Translation"]["NAMEFRIDGE"],
+                    type: "number",
+                    role: "value",
+                    write: true,
+                    read: true,
+                    def: 0,
+                    states: {
+                        "0": constants[this.lang + "Translation"]["F_DOOR"],
+                        "1": constants[this.lang + "Translation"]["F_ENERGY"],
+                        "2": constants[this.lang + "Translation"]["F_WATER"],
+                        "3": constants[this.lang + "Translation"]["F_ACTIVE"],
+                        "4": constants[this.lang + "Translation"]["F_FRIDGE"],
+                        "5": constants[this.lang + "Translation"]["F_SELFCARE"],
+                    },
+                },
+                native: {},
+            }).catch((error) => {
+                this.log.error(error);
+            });
+        }
+
+        this.setObjectNotExists(devicedp + ".remote.Statistic.period", {
+            type: "state",
+            common: {
+                name: constants[this.lang + "Translation"]["PERIOD"],
+                type: "number",
+                role: "value",
+                write: true,
+                read: true,
+                def: 0,
+                states: {
+                    "0": constants[this.lang + "Translation"]["DAILY"],
+                    "1": constants[this.lang + "Translation"]["MONTHLY"],
+                    "2": constants[this.lang + "Translation"]["YEARLY"],
+                },
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+        this.setObjectNotExists(devicedp + ".remote.Statistic.startDate", {
+            type: "state",
+            common: {
+                name: constants[this.lang + "Translation"]["STARTDATE"],
+                type: "string",
+                role: "value",
+                write: true,
+                read: true,
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+        this.setObjectNotExists(devicedp + ".remote.Statistic.endDate", {
+            type: "state",
+            common: {
+                name: constants[this.lang + "Translation"]["ENDDATE"],
+                type: "string",
+                role: "value",
+                write: true,
+                read: true,
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+        this.setObjectNotExists(devicedp + ".remote.Statistic.jsonResult", {
+            type: "state",
+            common: {
+                name: constants[this.lang + "Translation"]["JSONRESULT"],
+                type: "string",
+                role: "value",
+                write: false,
+                read: true,
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+        this.setObjectNotExists(devicedp + ".remote.Statistic.sendRequest", {
+            type: "state",
+            common: {
+                name: constants[this.lang + "Translation"]["SENDREQUEST"],
+                type: "boolean",
+                role: "button",
+                write: true,
+                read: true,
+                def: false,
+            },
+            native: {},
+        }).catch((error) => {
+            this.log.error(error);
+        });
+
+    }
     async lastDeviceCourse(devId) {
         try {
             const devtype = await this.getStateAsync(devId + ".deviceType");
@@ -1201,6 +1221,9 @@ class LgThinq extends utils.Adapter {
             controlUrl = this.gateway.thinq1Uri + "/" + "rti/rtiControl";
             data = values;
         }
+
+       this.log.debug(JSON.stringify(data));
+
         return this.requestClient
             .post(controlUrl, data, { headers })
             .then((resp) => resp.data)
@@ -1246,7 +1269,9 @@ class LgThinq extends utils.Adapter {
                 }
 
                 if (secsplit === "Statistic") {
-                    this.sendStaticRequest(id, deviceId);
+                    const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
+                    if (devType.val > 100 && devType.val < 104) this.sendStaticRequest(deviceId, true);
+                    else this.sendStaticRequest(deviceId, false);
                     this.log.debug(JSON.stringify(this.courseactual[deviceId]));
                     return;
                 }
@@ -1453,6 +1478,7 @@ class LgThinq extends utils.Adapter {
                     }
 
                     this.log.debug(JSON.stringify(response));
+
                     if ((response && response.resultCode && response.resultCode !== "0000") || (response && response.lgedmRoot && response.lgedmRoot.returnCd !== "0000")) {
                         this.log.error("Command not succesful");
                         this.log.error(JSON.stringify(response));
@@ -1487,11 +1513,14 @@ class LgThinq extends utils.Adapter {
         }
     }
 //Neu Anfang
-    async sendStaticRequest(id, device) {
+    async sendStaticRequest(device, fridge) {
         try {
-            const period = await this.getStateAsync(device + ".remote.Statistic.period");
-            let startD = await this.getStateAsync(device + ".remote.Statistic.startDate");
-            let endD   = await this.getStateAsync(device + ".remote.Statistic.endDate");
+            let statistic = null;
+            const period  = await this.getStateAsync(device + ".remote.Statistic.period");
+            let startD    = await this.getStateAsync(device + ".remote.Statistic.startDate");
+            let endD      = await this.getStateAsync(device + ".remote.Statistic.endDate");
+            let com       = "";
+            if (fridge) com = await this.getStateAsync(device + ".remote.Statistic.command");
             let per = "day";
             if (!this.checkdate(startD) || !this.checkdate(endD)) {
                 this.log.warn("Wrong date: Start: " + startD.val + " End: " + endD.val);
@@ -1503,14 +1532,48 @@ class LgThinq extends utils.Adapter {
             this.log.debug("START " + startD);
             this.log.debug("END " + endD);
             this.log.debug(JSON.stringify(per));
-            const statistic = await this.getDeviceEnergy("service/laundry/" + device + "/energy-history?type=period&period=" + per + "&startDate=" + startD + "&endDate=" + endD);
-            if (statistic !== undefined) {
+            let lasturl = "period=" + per + "&startDate=" + startD + "&endDate=" + endD;
+            if (!fridge) {
+                statistic = await this.getDeviceEnergy("service/laundry/" + device + "/energy-history?type=period&" + lasturl);
+            } else {
+                device = "service/fridge/" + device + "/";
+                if (com.val === 0)
+                    statistic = await this.getDeviceEnergy(device + "door-open-history?" + lasturl);
+                else if (com.val === 1)
+                    statistic = await this.getDeviceEnergy(device + "energy-history?" + lasturl);
+                else if (com.val === 2)
+                    statistic = await this.getDeviceEnergy(device + "water-consumption-history?" + lasturl);
+               else if (com.val === 3)
+                    statistic = await this.getDeviceEnergy(device + "active-power-saving?" + lasturl + "&lgTotalAverageInfo=&version=2");
+               else if (com.val === 4)
+                    statistic = await this.getDeviceEnergy(device + "fridge-water-history?" + lasturl);
+               else if (com.val === 5)
+                    statistic = await this.getDeviceEnergy(device + "fridge-water-history?self-care?startDate=" + startD + "&endDate=" + endD);
+            }
+            if (statistic !== undefined && statistic !== null) {
                 this.log.debug(JSON.stringify(statistic));
                 await this.setStateAsync(device + ".remote.Statistic.jsonResult", {
                     val: JSON.stringify(statistic),
                     ack: true
                 });
             }
+//service/laundry/"+e.product.id+"/courses/used
+//service/laundry/"+e.product.id+"/courses/"+r+"/favorite - POST
+//service/laundry/"+c.product.id+"/courses/favorite  {"item":[{"courseId":"DUVET","date":"20211215110248","courseType":null,"param1":"","param2":null}]}
+//service/laundry/"+e.product.id+"/energy-history?type=period&period="+(n||"month")+"&startDate="+r+"&endDate="+t
+//service/laundry/"+e.product.id+"/energy-history?type=period&period=day&startDate=2021-12-01&endDate=2021-12-31
+//service/laundry/"+e.product.id+"/energy-history?type=count&count="+t+"&washerType="+(o=o||"M")+"&sorting="+r {"count":0,"power":0,"energyWater":0,"energyDetergent":0,"energySoftener":0,"powerWh":0,"periodicEnergyData":0,"item":[{"timestamp":"1639913066652","courseSpendPower":"1","smartCourseFL24inchBaseTitan":"NOT_SELECTED","periodicEnergyData":"1","temp":"TEMP_30","courseFL24inchBaseTitan":"COTTON","spin":"SPIN_1600","rinse":"RINSE_NORMAL","dryLevel":"NOT_SELECTED","soilWash":"SOILWASH_NORMAL"}]}
+//service/users/push/config
+//service/users/push/config?deviceId="+e.product.id
+//service/users/push/send
+//service/devices/"+e.product.id+"/config
+//service/devices/"+e.product.id+"/network-status
+//service/devices/"+e.product.id+"/firmware
+//service/devices/"+e.product.id
+//service/fridge/"+e.product.id+"/smart-care/config?type=activeCooling&version=1";
+//service/fridge/"+e.product.id+"/smart-care/config?type=smartSafety&version=2";
+//service/fridge/"+e.product.id+"/night-mode";
+//service/fridge/"+e.product.id+"/push/config/expired-food";
         } catch (e) {
             this.log.error("Error in sendStaticRequest: " + e);
         }
