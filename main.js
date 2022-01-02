@@ -98,6 +98,7 @@ class Test extends utils.Adapter {
             .catch((error) => {
                 this.log.error(error);
             });
+
         if (this.gateway) {
             this.lgeapi_url = `https://${this.gateway.countryCode.toLowerCase()}.lgeapi.com/`;
 
@@ -111,11 +112,11 @@ class Test extends utils.Adapter {
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-//Bitte l√∂schen Anfang
+//Bitte lˆschen Anfang
                 //this.refreshTokenInterval = setInterval(() => {
                 //    this.refreshNewToken();
                 //}, this.session.expires_in * 1000);
-//Bitte l√∂schen Ende
+//Bitte lˆschen Ende
 //Neu Anfang
                 this.newrefreshTokenInterval(this.session.expires_in);
 //Neu Ende
@@ -260,6 +261,9 @@ class Test extends utils.Adapter {
                 const { code, message } = err.response.data.error;
                 if (code === "MS.001.03") {
                     this.log.error("Double-check your country in configuration");
+                }
+                if (code === "MS.001.16") {
+                    this.log.error("Please check your app and accept new agreements");
                 }
                 return;
             });
@@ -777,7 +781,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht f√Ø¬ø¬Ωr alle verf√Ø¬ø¬Ωgbar",
+                            desc: "Umweltfreundlich. Nicht fÔøΩr alle verfÔøΩgbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -789,7 +793,7 @@ class Test extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//Ge√§ndet Anfang
+//Ge‰ndet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -806,7 +810,7 @@ class Test extends utils.Adapter {
                                 });
                             }
                         });
-//Ge√§ndet Ende
+//Ge‰ndet Ende
                 }
             }
         }
@@ -1151,19 +1155,21 @@ class Test extends utils.Adapter {
                                 });
                             }
                         }
-                        // @ts-ignore
-                        await this.setObjectNotExistsAsync(path + state, {
-                            type: "state",
-                            common: common,
-                            native: {},
-                        }).catch((error) => {
-                            this.log.error(error);
-                        });
-
-                        // @ts-ignore
-                        this.extendObject(path + state, {
-                            common: common,
-                        });
+                        if (!obj) {
+                            // @ts-ignore
+                            await this.setObjectNotExistsAsync(path + state, {
+                                type: "state",
+                                common: common,
+                                native: {},
+                            }).catch((error) => {
+                                this.log.error(error);
+                            });
+                        } else {
+                            // @ts-ignore
+                            this.extendObject(path + state, {
+                                common: common,
+                            });
+                        }
                     });
                 });
             deviceModel["Value"] &&
@@ -1183,7 +1189,7 @@ class Test extends utils.Adapter {
                                 } else {
                                     const values = Object.keys(valueObject);
                                     values.forEach((value) => {
-                                        let content = valueObject[value];
+                                        const content = valueObject[value];
                                         if (typeof content === "string") {
                                             common.states[value] = content.replace("@", "");
                                         }
@@ -1232,7 +1238,9 @@ class Test extends utils.Adapter {
             });
     }
     sleep(ms) {
-        return new Promise((resolve) => setTimeout(resolve, ms));
+        return new Promise((resolve) => {
+            this.sleepTimer = setTimeout(resolve, ms);
+        });
     }
     /**
      * Is called when adapter shuts down - callback has to be called under any circumstances!
@@ -1240,10 +1248,10 @@ class Test extends utils.Adapter {
      */
     onUnload(callback) {
         try {
-            clearInterval(this.updateInterval);
-            clearInterval(this.refreshTokenInterval);
-            clearTimeout(this.refreshTimeout);
-
+            this.updateInterval && clearInterval(this.updateInterval);
+            this.refreshTokenInterval && clearInterval(this.refreshTokenInterval);
+            this.refreshTimeout && clearTimeout(this.refreshTimeout);
+            this.sleepTimer && clearTimeout(this.sleepTimer);
             callback();
         } catch (e) {
             callback();
@@ -1258,7 +1266,7 @@ class Test extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//Ge√§ndert Anfang
+//Ge‰ndert Anfang
                 const secsplit  = id.split('.')[id.split('.').length-2];
                 const lastsplit = id.split('.')[id.split('.').length-1];
                 const deviceId = id.split(".")[2];
@@ -1436,15 +1444,15 @@ class Test extends utils.Adapter {
                     }
 
                     data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//Ge√§ndert Ende
+//Ge‰ndert Ende
                     if (action === "WMStop" || action === "WMOff") {
                         data.ctrlKey = "WMControl";
                     }
 
                     this.log.debug(JSON.stringify(data));
-//Ge√§ndert Anfang
+//Ge‰ndert Anfang
                     if (data.dataSetList && nofor) {
-//Ge√§ndert Ende
+//Ge‰ndert Ende
                         const type = Object.keys(data.dataSetList)[0];
                         if (type) {
                             for (const dataElement of Object.keys(data.dataSetList[type])) {
