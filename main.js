@@ -112,11 +112,11 @@ class Test extends utils.Adapter {
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-//Bitte lˆschen Anfang
+//Bitte l√∂schen Anfang
                 //this.refreshTokenInterval = setInterval(() => {
                 //    this.refreshNewToken();
                 //}, this.session.expires_in * 1000);
-//Bitte lˆschen Ende
+//Bitte l√∂schen Ende
 //Neu Anfang
                 this.newrefreshTokenInterval(this.session.expires_in);
 //Neu Ende
@@ -202,13 +202,13 @@ class Test extends utils.Adapter {
             }
         }
     }
-
+//Neu Anfang
     async newrefreshTokenInterval(times) {
         this.refreshTokenInterval = setInterval(() => {
             this.refreshNewToken();
         }, times * 1000);
     }
-
+//Neu Ende
     async updateDevices() {
         const listDevices = await this.getListDevices().catch((error) => {
             this.log.error(error);
@@ -781,7 +781,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht fÔøΩr alle verfÔøΩgbar",
+                            desc: "Umweltfreundlich. Nicht f√Ø¬ø¬Ωr alle verf√Ø¬ø¬Ωgbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -793,7 +793,7 @@ class Test extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//Ge‰ndet Anfang
+//Ge√§ndet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -810,7 +810,7 @@ class Test extends utils.Adapter {
                                 });
                             }
                         });
-//Ge‰ndet Ende
+//Ge√§ndet Ende
                 }
             }
         }
@@ -1266,7 +1266,7 @@ class Test extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//Ge‰ndert Anfang
+//Ge√§ndert Anfang
                 const secsplit  = id.split('.')[id.split('.').length-2];
                 const lastsplit = id.split('.')[id.split('.').length-1];
                 const deviceId = id.split(".")[2];
@@ -1444,15 +1444,15 @@ class Test extends utils.Adapter {
                     }
 
                     data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//Ge‰ndert Ende
+//Ge√§ndert Ende
                     if (action === "WMStop" || action === "WMOff") {
                         data.ctrlKey = "WMControl";
                     }
 
                     this.log.debug(JSON.stringify(data));
-//Ge‰ndert Anfang
+//Ge√§ndert Anfang
                     if (data.dataSetList && nofor) {
-//Ge‰ndert Ende
+//Ge√§ndert Ende
                         const type = Object.keys(data.dataSetList)[0];
                         if (type) {
                             for (const dataElement of Object.keys(data.dataSetList[type])) {
