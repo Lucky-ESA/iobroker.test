@@ -1,1260 +1,1348 @@
-"use strict";
+'use strict';
 
 /*
- * Created with @iobroker/create-adapter v1.34.1
- * Based on https://github.com/nVuln/homebridge-lg-thinq
+ * Created with @iobroker/create-adapter v2.0.1
  */
 
 // The adapter-core module gives you access to the core ioBroker functions
 // you need to create an adapter
-const utils = require("@iobroker/adapter-core");
-const axios = require("axios");
-const crypto = require("crypto");
-const uuid = require("uuid");
-const qs = require("qs");
-const { DateTime } = require("luxon");
-const { extractKeys } = require("./lib/extractKeys");
-const constants = require("./lib/constants");
-const { URL } = require("url");
-//Neu Anfang
-const dateFormat = require('dateformat');
-//Neu Ende
+const options = {
+    explicitArray: false,
+    mergeAttrs: true
+};
+const utils      = require('@iobroker/adapter-core');
+const axios      = require("axios");
+const crypto     = require("crypto");
+const xml2js     = require('xml2js');
+const parser     = new xml2js.Parser(options);
+const qs         = require("qs");
+const encodeurl  = require("encodeurl");
+const createDP   = require("./lib/createDP");
+const updateDP   = require("./lib/updateDP");
+const getlist    = require("./lib/getlist");
+const fs         = require('fs');
+const https      = require('https');
+const httpsAgent = new https.Agent({
+    rejectUnauthorized: false
+//    cert: fs.readFileSync('./lib/boxcert.cer'),
+//    key: fs.readFileSync('client.key'),
+//    ca: fs.readFileSync('./lib/boxcert.cer'),
+});
+class Fritzboxdect extends utils.Adapter {
 
-class Test extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "test",
+            name: 'fritzboxdect',
         });
-        this.on("ready", this.onReady.bind(this));
-        this.on("stateChange", this.onStateChange.bind(this));
-        this.on("unload", this.onUnload.bind(this));
+        this.on('ready', this.onReady.bind(this));
+        this.on('stateChange', this.onStateChange.bind(this));
+        this.on('unload', this.onUnload.bind(this));
     }
 
     /**
      * Is called when databases are connected and adapter received configuration.
      */
     async onReady() {
+        // Initialize your adapter here
         this.setState("info.connection", false, true);
-        if (this.config.interval < 0.5) {
-            this.log.info("Set interval to minimum 0.5");
-            this.config.interval = 0.5;
-        }
-
-//Neu Anfang
-        this.monitoring        = false;
-        this.dev               = {};
-        this.dev["devID"]      = "NoDevice";
-//Neu Ende
-
-        // @ts-ignore
         this.requestClient = axios.create();
-        this.updateInterval = null;
-        this.session = {};
-        this.modelInfos = {};
-        this.auth = {};
-        this.workIds = [];
-        this.deviceControls = {};
-//Neu Anfang
-        this.deviceJson = {};
-        this.courseJson = {};
-        this.courseactual = {};
-        this.lang = "de";
-        await this.getForeignObject("system.config", async (err, data) => {
-            if (data && data.common) {
-                if (data.common.language !== this.lang) this.lang = "en";
-            }
-        });
-        this.log.debug(this.lang);
-//Neu Ende
-        this.extractKeys = extractKeys;
-        this.subscribeStates("*");
-        this.targetKeys = {};
+        this.strcheck      = null;
+        this.valuecheck    = null;
+        this.start         = null;
+        this.createDP      = new createDP(this);
+        this.updateDP      = new updateDP(this);
+        this.getlist       = new getlist(this);
+        this.xmlvalue      = {sid: 'start', blocktime: '', pbkf2: '', homeauto: false };
+        this.allobjects    = {};
+        this.alltemplates  = {};
+        this.allobjectsid  = null;
 
-        this.defaultHeaders = {
-            "x-api-key": constants.API_KEY,
-            "x-client-id": constants.API_CLIENT_ID,
-            "x-thinq-app-ver": "3.5.1700",
-            "x-thinq-app-type": "NUTS",
-            "x-thinq-app-level": "PRD",
-            "x-thinq-app-os": "ANDROID",
-            "x-thinq-app-logintype": "LGE",
-            "x-service-code": "SVC202",
-            "x-country-code": this.config.country,
-            "x-language-code": this.config.language,
-            "x-service-phase": "OP",
-            "x-origin": "app-native",
-            "x-model-name": "samsung / SM-N950N",
-            "x-os-version": "7.1.2",
-            "x-app-version": "3.5.1721",
-            "x-message-id": this.random_string(22),
-        };
-        this.gateway = await this.requestClient
-            .get(constants.GATEWAY_URL, { headers: this.defaultHeaders })
-            .then((res) => res.data.result)
-            .catch((error) => {
-                this.log.error(error);
-            });
-
-        if (this.gateway) {
-            this.lgeapi_url = `https://${this.gateway.countryCode.toLowerCase()}.lgeapi.com/`;
-
-            this.session = await this.login(this.config.user, this.config.password).catch((error) => {
-                this.log.error(error);
-            });
-            if (this.session && this.session.access_token) {
-//Vor Ablauf erneuern Anfang
-                this.session.expires_in = this.session.expires_in - 60;
-//Vor Ablauf erneuern Ende
-                this.log.debug(JSON.stringify(this.session));
-                this.setState("info.connection", true, true);
-                this.log.info("Login successful");
-//Bitte lÃ¶schen Anfang
-                //this.refreshTokenInterval = setInterval(() => {
-                //    this.refreshNewToken();
-                //}, this.session.expires_in * 1000);
-//Bitte lÃ¶schen Ende
-//Neu Anfang
-                this.newrefreshTokenInterval(this.session.expires_in);
-//Neu Ende
-                this.userNumber = await this.getUserNumber();
-                this.defaultHeaders["x-user-no"] = this.userNumber;
-                this.defaultHeaders["x-emp-token"] = this.session.access_token;
-                const listDevices = await this.getListDevices();
-
-                this.log.info("Found: " + listDevices.length + " devices");
-//Neu Anfang
-                await this.setObjectNotExistsAsync("monitoringinfo", {
-                    type: "channel",
-                    common: {
-                        name: "Info ThinQ2 Monitoring",
-                        role: "state",
-                    },
-                    native: {},
-                });
-                await this.setObjectNotExists("monitoringinfo.last_update", {
-                    type: "state",
-                    common: {
-                        name: "Timestamp last update - ThinQ2",
-                        type: "number",
-                        role: "indicator.date",
-                        write: false,
-                        read: true,
-                    },
-                    native: {},
-                });
-                await this.setObjectNotExists("monitoringinfo.monitoring_active", {
-                    type: "state",
-                    common: {
-                        name: "Montitoring active - ThinQ2",
-                        type: "boolean",
-                        role: "indicator.state",
-                        write: false,
-                        read: true,
-                        def: false,
-                    },
-                    native: {},
-                });
-                await this.setStateAsync("monitoringinfo.monitoring_active", {
-                    val: false,
-                    ack: true
-                });
-                await this.setObjectNotExists("monitoringinfo.monitoring_deviceID", {
-                    type: "state",
-                    common: {
-                        name: "Montitoring deviceId - ThinQ2",
-                        type: "string",
-                        role: "indicator",
-                        write: false,
-                        read: true,
-                        def: "",
-                    },
-                    native: {},
-                });
-                await this.setStateAsync("monitoringinfo.monitoring_deviceID", {
-                    val: "",
-                    ack: true
-                });
-//Neu Ende
-                listDevices.forEach(async (element) => {
-                    await this.setObjectNotExistsAsync(element.deviceId, {
-                        type: "device",
-                        common: {
-                            name: element.alias,
-                            role: "state",
-                        },
-                        native: {},
-                    });
-                    this.extractKeys(this, element.deviceId, element, null, false, true);
-                    this.modelInfos[element.deviceId] = await this.getDeviceModelInfo(element);
-                    await this.pollMonitor(element);
-                    await this.sleep(2000);
-                    this.extractValues(element);
-                });
-
-                this.log.debug(JSON.stringify(listDevices));
-                this.updateInterval = setInterval(async () => {
-                    await this.updateDevices();
-                }, this.config.interval * 60 * 1000);
-            }
-        }
-    }
-//Neu Anfang
-    async newrefreshTokenInterval(times) {
-        this.refreshTokenInterval = setInterval(() => {
-            this.refreshNewToken();
-        }, times * 1000);
-    }
-//Neu Ende
-    async updateDevices() {
-        const listDevices = await this.getListDevices().catch((error) => {
-            this.log.error(error);
-        });
-
-        listDevices.forEach(async (element) => {
-            this.extractKeys(this, element.deviceId, element);
-            this.pollMonitor(element);
-        });
-        this.log.debug(JSON.stringify(listDevices));
-    }
-
-    async login(username, password) {
-        // get signature and timestamp in login form
-        const loginForm = await this.requestClient.get(await this.getLoginUrl()).then((res) => res.data);
-        const headers = {
-            Accept: "application/json",
-            "X-Application-Key": constants.APPLICATION_KEY,
-            "X-Client-App-Key": constants.CLIENT_ID,
-            "X-Lge-Svccode": "SVC709",
-            "X-Device-Type": "M01",
-            "X-Device-Platform": "ADR",
-            "X-Device-Language-Type": "IETF",
-            "X-Device-Publish-Flag": "Y",
-            "X-Device-Country": this.gateway.countryCode,
-            "X-Device-Language": this.gateway.languageCode,
-            "X-Signature": loginForm.match(/signature\s+:\s+"([^"]+)"/)[1],
-            "X-Timestamp": loginForm.match(/tStamp\s+:\s+"([^"]+)"/)[1],
-            "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        };
-
-        const hash = crypto.createHash("sha512");
-        const data = {
-            user_auth2: hash.update(password).digest("hex"),
-            itg_terms_use_flag: "Y",
-            svc_list: "SVC202,SVC710", // SVC202=LG SmartHome, SVC710=EMP OAuth
-        };
-
-        // try login with username and hashed password
-        const loginUrl = this.gateway.empTermsUri + "/" + "emp/v2.0/account/session/" + encodeURIComponent(username);
-        const res = await this.requestClient
-            .post(loginUrl, qs.stringify(data), { headers })
-            .then((res) => res.data)
-            .catch((err) => {
-                if (!err.response) {
-                    this.log.error(err);
-                    return;
-                }
-                this.log.error(JSON.stringify(err.response.data));
-                const { code, message } = err.response.data.error;
-                if (code === "MS.001.03") {
-                    this.log.error("Double-check your country in configuration");
-                }
-                if (code === "MS.001.16") {
-                    this.log.error("Please check your app and accept new agreements");
-                }
-                return;
-            });
-        if (!res) {
-            return;
-        }
-        // dynamic get secret key for emp signature
-        const empSearchKeyUrl = this.gateway.empSpxUri + "/" + "searchKey?key_name=OAUTH_SECRETKEY&sever_type=OP";
-        const secretKey = await this.requestClient
-            .get(empSearchKeyUrl)
-            .then((res) => res.data)
-            .then((data) => data.returnData);
-
-        const timestamp = DateTime.utc().toRFC2822();
-        const empData = {
-            account_type: res.account.userIDType,
-            client_id: constants.CLIENT_ID,
-            country_code: res.account.country,
-            username: res.account.userID,
-        };
-        const empUrl = "/emp/oauth2/token/empsession" + qs.stringify(empData, { addQueryPrefix: true });
-        const signature = this.signature(`${empUrl}\n${timestamp}`, secretKey);
-        const empHeaders = {
-            "lgemp-x-app-key": constants.OAUTH_CLIENT_KEY,
-            "lgemp-x-date": timestamp,
-            "lgemp-x-session-key": res.account.loginSessionID,
-            "lgemp-x-signature": signature,
-            Accept: "application/json",
-            "X-Device-Type": "M01",
-            "X-Device-Platform": "ADR",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Access-Control-Allow-Origin": "*",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Accept-Language": "en-US,en;q=0.9",
-        };
-        // create emp session and get access token
-        const token = await this.requestClient
-            .post("https://emp-oauth.lgecloud.com/emp/oauth2/token/empsession", qs.stringify(empData), {
-                headers: empHeaders,
-            })
-            .then((res) => res.data)
-            .catch((err) => {
-                this.log.error(err.response.data.error.message);
-                return;
-            });
-        if (token.status !== 1) {
-            this.log.error(token.message);
+        if (this.config.password === null || this.config.password === undefined) {
+            this.log.error("Password is not set!!");
             return;
         }
 
-        this.lgeapi_url = token.oauth2_backend_url || this.lgeapi_url;
-
-        return token;
-    }
-
-    async pollMonitor(device) {
-        if (device.platformType === "thinq1") {
-            this.log.debug("start polling");
-            let result = new Uint8Array(1024);
-            try {
-                if (!(device.deviceId in this.workIds)) {
-                    this.log.debug(device.deviceId + " is connecting");
-                    await this.startMonitor(device);
-                    await this.sleep(5000);
-                }
-                result = await this.getMonitorResult(device.deviceId, this.workIds[device.deviceId]);
-                if (result && typeof result === "object") {
-                    let resultConverted;
-                    if (this.modelInfos[device.deviceId].Monitoring.type === "BINARY(BYTE)") {
-                        resultConverted = this.decodeMonitorBinary(result, this.modelInfos[device.deviceId].Monitoring.protocol);
-                    }
-                    if (this.modelInfos[device.deviceId].Monitoring.type === "JSON") {
-                        resultConverted = JSON.parse(result.toString("utf-8"));
-                    }
-                    this.log.debug(JSON.stringify(resultConverted));
-                    await extractKeys(this, device.deviceId + ".snapshot", resultConverted);
-                    return resultConverted;
-                } else {
-                    this.log.debug("No data:" + JSON.stringify(result) + " " + device.deviceId);
-                }
-                await this.stopMonitor(device);
-            } catch (err) {
-                this.log.error(err);
-            }
-        }
-    }
-    async startMonitor(device) {
-        try {
-            if (device.platformType === "thinq1") {
-                const sendId = uuid.v4();
-                const returnWorkId = await this.sendMonitorCommand(device.deviceId, "Start", sendId).then((data) => data.workId);
-                this.workIds[device.deviceId] = returnWorkId;
-            }
-        } catch (err) {
-            this.log.error(err);
-        }
-    }
-
-    async stopMonitor(device) {
-        if (device.platformType === "thinq1" && device.deviceId in this.workIds) {
-            try {
-                await this.sendMonitorCommand(device.deviceId, "Stop", this.workIds[device.deviceId]);
-                delete this.workIds[device.deviceId];
-            } catch (err) {
-                this.log.error(err);
-            }
-        }
-    }
-    decodeMonitorBinary(data, protocol) {
-        const decoded = {};
-
-        for (const item of protocol) {
-            const key = item.value;
-            let value = 0;
-
-            for (let i = item.startByte; i < item.startByte + item.length; i++) {
-                const v = data[i];
-                value = (value << 8) + v;
-                decoded[key] = String(value);
-            }
-        }
-
-        return decoded;
-    }
-    async refreshNewToken() {
-        this.log.debug("refreshToken");
-        const tokenUrl = this.lgeapi_url + "oauth2/token";
-        const data = {
-            grant_type: "refresh_token",
-            refresh_token: this.session.refresh_token,
-        };
-
-        const timestamp = DateTime.utc().toRFC2822();
-
-        const requestUrl = "/oauth2/token" + qs.stringify(data, { addQueryPrefix: true });
-        const signature = this.signature(`${requestUrl}\n${timestamp}`, constants.OAUTH_SECRET_KEY);
-
-        const headers = {
-            "lgemp-x-app-key": constants.CLIENT_ID,
-            "lgemp-x-signature": signature,
-            "lgemp-x-date": timestamp,
-            Accept: "application/json",
-            "Content-Type": "application/x-www-form-urlencoded",
-        };
-        const resp = await this.requestClient
-            .post(tokenUrl, qs.stringify(data), { headers })
-            .then((resp) => resp.data)
-            .catch((error) => {
-                this.log.error(error);
-            });
-        this.log.debug(JSON.stringify(resp));
-        if (this.session) {
-            this.session.access_token = resp.access_token;
-            this.defaultHeaders["x-emp-token"] = this.session.access_token;
-//Neu set new interval Anfang
-            this.session.expires_in = resp.expires_in - 60;
-            clearInterval(this.refreshTokenInterval);
-            this.newrefreshTokenInterval(this.session.expires_in);
-//Neu set new interval Ende
-        }
-    }
-
-    async getUserNumber() {
-        const profileUrl = this.lgeapi_url + "users/profile";
-        const timestamp = DateTime.utc().toRFC2822();
-        const signature = this.signature(`/users/profile\n${timestamp}`, constants.OAUTH_SECRET_KEY);
-
-        const headers = {
-            Accept: "application/json",
-            Authorization: "Bearer " + this.session.access_token,
-            "X-Lge-Svccode": "SVC202",
-            "X-Application-Key": constants.APPLICATION_KEY,
-            "lgemp-x-app-key": constants.CLIENT_ID,
-            "X-Device-Type": "M01",
-            "X-Device-Platform": "ADR",
-            "x-lge-oauth-date": timestamp,
-            "x-lge-oauth-signature": signature,
-        };
-
-        const resp = await this.requestClient
-            .get(profileUrl, { headers })
-            .then((resp) => resp.data)
-            .catch((error) => {
-                this.log.error(error);
-            });
-        this.extractKeys(this, "general", resp);
-        this.log.debug(JSON.stringify(resp));
-        return resp.account.userNo;
-    }
-
-    async getLoginUrl() {
-        const params = {
-            country: this.gateway.countryCode,
-            language: this.gateway.languageCode,
-            client_id: constants.CLIENT_ID,
-            svc_list: constants.SVC_CODE,
-            svc_integrated: "Y",
-            redirect_uri: this.gateway.empSpxUri + "/" + "login/iabClose",
-            show_thirdparty_login: "LGE,MYLG",
-            division: "ha:T20",
-            callback_url: this.gateway.empSpxUri + "/" + "login/iabClose",
-        };
-
-        return this.gateway.empSpxUri + "/" + "login/signIn" + qs.stringify(params, { addQueryPrefix: true });
-    }
-
-    async sendMonitorCommand(deviceId, cmdOpt, workId) {
-        const headers = Object.assign({}, this.defaultHeaders);
-        headers["x-client-id"] = constants.API1_CLIENT_ID;
-        const data = {
-            cmd: "Mon",
-            cmdOpt,
-            deviceId,
-            workId,
-        };
-        return await this.requestClient
-            .post(this.gateway.thinq1Uri + "/" + "rti/rtiMon", { lgedmRoot: data }, { headers })
-            .then((res) => res.data.lgedmRoot)
-            .then((data) => {
-                if ("returnCd" in data) {
-                    const code = data.returnCd;
-                    if (code === "0106") {
-                        this.log.error(data.returnMsg || "");
-                    } else if (code !== "0000") {
-                        this.log.error(code + " - " + data.returnMsg || "");
-                    }
-                }
-                this.log.debug(JSON.stringify(data));
-                return data;
-            })
-            .catch((error) => {
-                this.log.error(error);
-            });
-    }
-
-    async getMonitorResult(device_id, work_id) {
-        const headers = Object.assign({}, this.defaultHeaders);
-        headers["x-client-id"] = constants.API1_CLIENT_ID;
-        const workList = [{ deviceId: device_id, workId: work_id }];
-        return await this.requestClient
-            .post(this.gateway.thinq1Uri + "/" + "rti/rtiResult", { lgedmRoot: { workList } }, { headers })
-            .then((resp) => resp.data.lgedmRoot)
-            .then((data) => {
-                if ("returnCd" in data) {
-                    const code = data.returnCd;
-                    if (code === "0106") {
-                        return code;
-                    } else if (code !== "0000") {
-                        this.log.error(code + " - " + data.returnMsg || "");
-                        return code;
-                    }
-                }
-                this.log.debug(JSON.stringify(data));
-                const workList = data.workList;
-                if (!workList || workList.returnCode !== "0000") {
-                    this.log.debug(JSON.stringify(data));
-                    return null;
-                }
-
-                if (!("returnData" in workList)) {
-                    return null;
-                }
-
-                return Buffer.from(workList.returnData, "base64");
-            })
-            .catch((error) => {
-                this.log.error(error);
-            });
-    }
-
-    signature(message, secret) {
-        return crypto.createHmac("sha1", Buffer.from(secret)).update(message).digest("base64");
-    }
-    random_string(length) {
-        const result = [];
-        const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        const charactersLength = characters.length;
-        for (let i = 0; i < length; i++) {
-            result.push(characters.charAt(Math.floor(Math.random() * charactersLength)));
-        }
-        return result.join("");
-    }
-    resolveUrl(from, to) {
-        const url = new URL(to, from);
-        return url.href;
-    }
-    async getDeviceInfo(deviceId) {
-        const headers = this.defaultHeaders;
-        const deviceUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", "service/devices/" + deviceId);
-
-        return this.requestClient
-            .get(deviceUrl, { headers })
-            .then((res) => res.data.result)
-            .catch((error) => {
-                this.log.error("getDeviceInfo: " + error);
-                if (error.response && error.response.status === 400) {
-                    this.log.info("Try to refresh Token");
-                    this.refreshNewToken();
-                }
-            });
-    }
-
-    async getDeviceEnergy(path) {
-        const headers = this.defaultHeaders;
-        const deviceUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", path);
-
-        return this.requestClient
-            .get(deviceUrl, { headers })
-            .then((res) => res.data.result)
-            .catch((error) => {
-                this.log.error("getDeviceEnergy: " + error);
-                if (error.response && error.response.status === 400) {
-                    this.log.info("Try to refresh Token");
-                    //this.refreshNewToken();
-                }
-            });
-    }
-
-    async getListDevices() {
-        if (!this.homes) {
-            this.homes = await this.getListHomes();
-            if (!this.homes) {
-                this.log.error("Could not receive homes. Please check your app and accept new agreements");
-                return [];
-            }
-            this.extractKeys(this, "homes", this.homes);
-        }
-        const headers = this.defaultHeaders;
-        const devices = [];
-
-        // get all devices in home
-        for (let i = 0; i < this.homes.length; i++) {
-            const homeUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", "service/homes/" + this.homes[i].homeId);
-            const resp = await this.requestClient
-                .get(homeUrl, { headers })
-                .then((res) => res.data)
-                .catch((error) => {
-                    this.log.debug("Failed to get home");
-                    this.log.error(error);
-                    if (error.response && error.response.data) {
-                        this.log.error(JSON.stringify(error.response.data));
-                    }
-                    if (error.response && error.response.status === 400) {
-                        this.log.info("Try to refresh Token");
-                        this.refreshNewToken();
-                    }
-                    return;
-                });
-
-            this.log.debug(JSON.stringify(resp));
-            if (resp) {
-                this.log.debug(JSON.stringify(resp));
-                devices.push(...resp.result.devices);
-            }
-        }
-
-        return devices;
-    }
-
-    async getListHomes() {
-        if (!this._homes) {
-            const headers = this.defaultHeaders;
-            const homesUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", "service/homes");
-            this._homes = await this.requestClient
-                .get(homesUrl, { headers })
-                .then((res) => res.data)
-                .then((data) => data.result.item)
-                .catch((error) => {
-                    this.log.error(error);
-                    error.response && this.log.error(JSON.stringify(error.response.data));
-                });
-        }
-
-        return this._homes;
-    }
-    async getDeviceModelInfo(device) {
-        if (!device.modelJsonUri) {
+        if (this.config.username === null || this.config.username === undefined) {
+            this.log.error("Username is not set!!");
             return;
         }
-        const deviceModel = await this.requestClient
-            .get(device.modelJsonUri)
-            .then((res) => res.data)
-            .catch((error) => {
-                this.log.error(error);
-                return;
-            });
-        if (deviceModel) {
-            await this.setObjectNotExistsAsync(device.deviceId + ".remote", {
-                type: "channel",
-                common: {
-                    name: "remote control device",
-                    role: "state",
-                },
-                native: {},
-            });
-            if (deviceModel["ControlWifi"]) {
-                this.log.debug(JSON.stringify(deviceModel["ControlWifi"]));
-                let controlWifi = deviceModel["ControlWifi"];
-                if (deviceModel["ControlWifi"].action) {
-                    controlWifi = deviceModel["ControlWifi"].action;
-                }
-                this.deviceControls[device.deviceId] = controlWifi;
-//Neu Anfang
-                this.deviceJson[device.deviceId] = deviceModel;
-//Neu Ende
-                const controlId = deviceModel["Info"].productType + "Control";
-                await this.setObjectNotExistsAsync(device.deviceId + ".remote", {
-                    type: "channel",
-                    common: {
-                        name: "remote control device",
-                        role: "state",
-                    },
-                    native: {},
-                });
-//Neu Anfang
-                await this.setObjectNotExists(device.deviceId + ".remote.Monitoring", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["MON_DEVICE"],
-                        type: "boolean",
-                        role: "switch",
-                        write: true,
-                        read: true,
-                        def: false,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-                await this.setStateAsync(device.deviceId + ".remote.Monitoring", {
-                    val: false,
-                    ack: true
-                });
-//Neu Ende
-                if (deviceModel["Info"].productType === "REF") {
-//Neu Anfang
-                    this.createStatistic(device.deviceId, 101);
-//Neu Ende
-                    await this.setObjectNotExists(device.deviceId + ".remote.fridgeTemp", {
-                        type: "state",
-                        common: {
-                            name: "fridgeTemp_C",
-                            type: "number",
-                            write: true,
-                            read: true,
-                            role: "level",
-                            desc: "Nur Celsius",
-                            min: 1,
-                            max: 7,
-                            unit: "",
-                            def: 1,
-                            states: {
-                                1: "7",
-                                2: "6",
-                                3: "5",
-                                4: "4",
-                                5: "3",
-                                6: "2",
-                                7: "1",
-                            },
-                        },
-                        native: {},
-                    });
-                    await this.setObjectNotExists(device.deviceId + ".remote.freezerTemp", {
-                        type: "state",
-                        common: {
-                            name: "freezerTemp_C",
-                            type: "number",
-                            write: true,
-                            read: true,
-                            role: "level",
-                            desc: "Nur Celsius",
-                            min: 1,
-                            max: 11,
-                            unit: "",
-                            def: 1,
-                            states: {
-                                1: "-14",
-                                2: "-15",
-                                3: "-16",
-                                4: "-17",
-                                5: "-18",
-                                6: "-19",
-                                7: "-20",
-                                8: "-21",
-                                9: "-22",
-                                10: "-23",
-                                11: "-24",
-                            },
-                        },
-                        native: {},
-                    });
-                    await this.setObjectNotExists(device.deviceId + ".remote.expressMode", {
-                        type: "state",
-                        common: {
-                            name: "expressMode",
-                            type: "boolean",
-                            write: true,
-                            read: true,
-                            role: "state",
-                            desc: "Expressmode",
-                            def: false,
-                            states: {
-                                true: "EXPRESS_ON",
-                                false: "OFF",
-                            },
-                        },
-                        native: {},
-                    });
-                    await this.setObjectNotExists(device.deviceId + ".remote.ecoFriendly", {
-                        type: "state",
-                        common: {
-                            name: "ecoFriendly",
-                            type: "boolean",
-                            write: true,
-                            read: true,
-                            role: "state",
-                            desc: "Umweltfreundlich. Nicht fÃ¯Â¿Â½r alle verfÃ¯Â¿Â½gbar",
-                            def: false,
-                            states: {
-                                true: "ON",
-                                false: "OFF",
-                            },
-                        },
-                        native: {},
-                    });
-                } else {
-                    controlWifi &&
-                        Object.keys(controlWifi).forEach((control) => {
-//GeÃ¤ndet Anfang
-                            if (control === "WMDownload") {
-                                this.createremote(device.deviceId, control, deviceModel);
-                            } else {
-                                this.setObjectNotExists(device.deviceId + ".remote." + control, {
-                                    type: "state",
-                                    common: {
-                                        name: control,
-                                        type: "boolean",
-                                        role: "boolean",
-                                        write: true,
-                                        read: true,
-                                    },
-                                    native: {},
-                                });
-                            }
-                        });
-//GeÃ¤ndet Ende
-                }
-            }
+
+        if (this.config.ip === null || this.config.ip === undefined) {
+            this.log.error("IP is not set!!");
+            return;
         }
-        return deviceModel;
-    }
-//Neu Anfang
-    createremote(devicedp, control, course) {
-        try {
-            let states = {};
-            let dev    = "";
-            this.courseJson[devicedp] = {};
-            this.courseactual[devicedp] = {};
-            if (control === "WMDownload") {
-                this.lastDeviceCourse(devicedp);
-                Object.keys(course["Course"]).forEach( async (value) => {
-                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
-                });
-                Object.keys(course["SmartCourse"]).forEach( async (value) => {
-                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
-                });
-                this.setObjectNotExists(devicedp + ".remote.Course", {
-                    type: "channel",
-                    common: {
-                        name: constants[this.lang + "Translation"]["SEL_PROGRAM"],
-                        role: "state",
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
 
-                this.createStatistic(devicedp);
+        this.Headers =  { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' };
+        this.name = { username: this.config.username };
+        this.config.ip = this.config.ip.replace("http://", "").replace("https://", "");
 
-                this.setObjectNotExists(devicedp + ".remote.Favorite", {
-                    type: "state",
-                    common: {
-                        name: constants[this.lang + "Translation"]["FAVORITE"],
-                        type: "boolean",
-                        role: "button",
-                        write: true,
-                        read: true,
-                    },
-                    native: {},
-                }).catch((error) => {
-                    this.log.error(error);
-                });
-
-                let common = {};
-                dev = Object.keys(this.deviceControls[devicedp]["WMDownload"]["data"])[0];
-                dev = this.deviceControls[devicedp]["WMDownload"]["data"][dev];
-                Object.keys(dev).forEach( async (value) => {
-                    common = {
-                        name: "unbekannt",
-                        type: "string",
-                        role: "value",
-                        write: true,
-                        read: true,
-                    }
-                    states = {};
-                    if (course["MonitoringValue"][value]) {
-                        Object.keys(course["MonitoringValue"][value]["valueMapping"]).forEach( async (map) => {
-                            if (map === "min" || map === "max") {
-                                common[map] = (course["MonitoringValue"][value]["valueMapping"][map] !== 3) ? course["MonitoringValue"][value]["valueMapping"][map] : 0;
-                                common["type"] = "number";
-                                common["def"] = 0;
-                            } else {
-                                states[map] = (constants[this.lang + "Translation"][map]) ? constants[this.lang + "Translation"][map] : states[map]["value"];
-                            }
-                        });
-                        common["name"] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : value;
-                        if (Object.keys(states).length > 0) common["states"] = states;
-                        this.courseJson[devicedp][value] = dev[value];
-                        this.courseactual[devicedp][value] = dev[value];
-                        await this.setObjectNotExistsAsync(devicedp + ".remote.Course." + value, {
-                            type: "state",
-                            common: common,
-                            native: {},
-                        }).catch((error) => {
-                            this.log.error(error);
-                        });
-                    }
-                });
-            }
-        } catch (e) {
-            this.log.error("Error in valueinfolder: " + e);
+        if (this.config.ssl) {
+            this.config.ip = 'https://' + this.config.ip
+            this.requestClient = axios.create({ httpsAgent });
+        } else {
+            this.config.ip = 'http://' + this.config.ip
         }
+
+        this.subscribeStates('*');
+        await this.DECT_Control();
+        await this.Fritzbox("start", this.name);
+        this.updateInterval = setInterval(async () => {
+            this.start = null;
+        }, this.config.dect_int * 60 * 1000);
+        this.updateTemplateInterval = setInterval(async () => {
+            this.check = { username: this.config.username, sid: this.xmlvalue.sid };
+            this.Fritzbox("templates", this.check);
+        }, this.config.temp_int * 60 * 60 * 1000);
     }
 
-    async createStatistic(devicedp, fridge) {
-        await this.setObjectNotExists(devicedp + ".remote.Statistic", {
+    /**
+     * DECT_Control!
+     * Create control datapoints
+     */
+    async DECT_Control() {
+        await this.setObjectNotExistsAsync('DECT_Control', {
             type: "channel",
             common: {
-                name: constants[this.lang + "Translation"]["STATISTIC"],
+                name: "DECT Control",
                 role: "state",
+                icon: "/icons/control.png",
             },
             native: {},
-        }).catch((error) => {
-            this.log.error(error);
         });
 
-        if (fridge === 101) {
-            this.setObjectNotExists(devicedp + ".remote.Statistic.command", {
-                type: "state",
-                common: {
-                    name: constants[this.lang + "Translation"]["NAMEFRIDGE"],
-                    type: "number",
-                    role: "value",
-                    write: true,
-                    read: true,
-                    def: 0,
-                    states: {
-                        "0": constants[this.lang + "Translation"]["F_DOOR"],
-                        "1": constants[this.lang + "Translation"]["F_ENERGY"],
-                        "2": constants[this.lang + "Translation"]["F_WATER"],
-                        "3": constants[this.lang + "Translation"]["F_ACTIVE"],
-                        "4": constants[this.lang + "Translation"]["F_FRIDGE"],
-                        "5": constants[this.lang + "Translation"]["F_SELFCARE"],
-                    },
-                },
-                native: {},
-            }).catch((error) => {
-                this.log.error(error);
-            });
-        }
-
-        this.setObjectNotExists(devicedp + ".remote.Statistic.period", {
+        await this.setObjectNotExists('DECT_Control.startulesubscription', {
             type: "state",
             common: {
-                name: constants[this.lang + "Translation"]["PERIOD"],
-                type: "number",
-                role: "value",
-                write: true,
-                read: true,
-                def: 0,
-                states: {
-                    "0": constants[this.lang + "Translation"]["DAILY"],
-                    "1": constants[this.lang + "Translation"]["MONTHLY"],
-                    "2": constants[this.lang + "Translation"]["YEARLY"],
-                },
-            },
-            native: {},
-        }).catch((error) => {
-            this.log.error(error);
-        });
-
-        this.setObjectNotExists(devicedp + ".remote.Statistic.startDate", {
-            type: "state",
-            common: {
-                name: constants[this.lang + "Translation"]["STARTDATE"],
-                type: "string",
-                role: "value",
-                write: true,
-                read: true,
-            },
-            native: {},
-        }).catch((error) => {
-            this.log.error(error);
-        });
-
-        this.setObjectNotExists(devicedp + ".remote.Statistic.endDate", {
-            type: "state",
-            common: {
-                name: constants[this.lang + "Translation"]["ENDDATE"],
-                type: "string",
-                role: "value",
-                write: true,
-                read: true,
-            },
-            native: {},
-        }).catch((error) => {
-            this.log.error(error);
-        });
-
-        this.setObjectNotExists(devicedp + ".remote.Statistic.jsonResult", {
-            type: "state",
-            common: {
-                name: constants[this.lang + "Translation"]["JSONRESULT"],
-                type: "string",
-                role: "value",
-                write: false,
-                read: true,
-            },
-            native: {},
-        }).catch((error) => {
-            this.log.error(error);
-        });
-
-        this.setObjectNotExists(devicedp + ".remote.Statistic.sendRequest", {
-            type: "state",
-            common: {
-                name: constants[this.lang + "Translation"]["SENDREQUEST"],
+                name: "startulesubscription",
                 type: "boolean",
                 role: "button",
                 write: true,
                 read: true,
-                def: false,
             },
             native: {},
-        }).catch((error) => {
-            this.log.error(error);
         });
 
-    }
-    async lastDeviceCourse(devId) {
-        try {
-            const devtype = await this.getStateAsync(devId + ".deviceType");
-            const datacourse = await this.getDeviceEnergy("service/laundry/" + devId + "/energy-history?type=count&count=10&washerType=" + devtype + "&sorting=Y");
-            if (datacourse !== undefined && Object.keys(datacourse["item"]).length > 0) {
-                let states = {};
-                let count  = 0;
-                let name   = "";
-                let startdate = "";
-                let common = {
-                    name: constants[this.lang + "Translation"]["LASTCOURSE"],
-                    type: "number",
-                    role: "value",
-                    write: true,
-                    read: true,
-                    def: 0,
-                };
-                for (const items of Object.keys(datacourse["item"])) {
-                    ++count;
-                    name = null;
-                    Object.keys(datacourse["item"][items]).forEach( async (keys) => {
-                        if (keys === "timestamp") {
-                            if (this.lang === "de") {
-                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-MM-dd HH:MM:ss");
-                            } else {
-                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-mm-dd h:MM:ss  TT");
-                            }
-                            states[count] = startdate;
-                        }
-                        if (keys === "courseFL24inchBaseTitan") {
-                            if (name === null)
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
-                        }
-                        if (keys === "smartCourseFL24inchBaseTitan") {
-                            if (datacourse["item"][items][keys] !== "NOT_SELECTED")
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
-                        }
-                    });
-                    states[count] += " - " +  name;
-                }
-                states["0"] = "NOT_SELECTED";
-                common["desc"] = datacourse["item"];
-                common["states"] = states;
-                await this.setObjectNotExistsAsync(devId + ".remote.LastCourse", {
-                    type: "state",
-                    common: common,
-                    native: {},
-                    })
-                    .catch((error) => {
-                        this.log.error("LastCourse: " + error);
-                });
-                this.extendObject(devId + ".remote.LastCourse", {
-                    common: common,
-                });
-                this.log.debug(JSON.stringify(states));
-            } else {
-                this.log.info("Not found washes!");
-            }
-        } catch (e) {
-            this.log.error("lastDeviceCourse: " + JSON.stringify(datacourse) + " - Error: " + e);
-        }
-    }
-//Neu Ende
+        await this.setObjectNotExists('DECT_Control.getsubscriptionstate', {
+            type: "state",
+            common: {
+                name: "getsubscriptionstate",
+                type: "boolean",
+                role: "button",
+                write: true,
+                read: true,
+            },
+            native: {},
+        });
 
-    extractValues(device) {
-        const deviceModel = this.modelInfos[device.deviceId];
-        if (deviceModel["MonitoringValue"] || deviceModel["Value"]) {
-            this.log.debug("extract values from model");
-            let type = "";
-            if (device["snapshot"]) {
-                Object.keys(device["snapshot"]).forEach((subElement) => {
-                    if (subElement !== "meta" && subElement !== "static" && typeof device["snapshot"][subElement] === "object") {
-                        type = subElement;
-                    }
-                });
-            }
-            let path = device.deviceId + ".snapshot.";
-            if (type) {
-                path = path + type + ".";
-            }
-//Neu Start
-            const onlynumber = /^-?[0-9]+$/;
-//Neu Ende
-            deviceModel["MonitoringValue"] &&
-                Object.keys(deviceModel["MonitoringValue"]).forEach((state) => {
-                    this.getObject(path + state, async (err, obj) => {
-                        let common = {
-                            name: state,
-                            type: "mixed",
-                            write: false,
-                            read: true,
-                        };
-                        if (obj) {
-                            common = obj.common;
-                        }
-//Bug Empty States Anfang
-                        //common.states = {};
-//Bug Empty States Ende
-                        if (deviceModel["MonitoringValue"][state]["targetKey"]) {
-                            this.targetKeys[state] = [];
-                            const firstKeyName = Object.keys(deviceModel["MonitoringValue"][state]["targetKey"])[0];
-                            const firstObject = deviceModel["MonitoringValue"][state]["targetKey"][firstKeyName];
-                            Object.keys(firstObject).forEach((targetKey) => {
-                                this.targetKeys[state].push(firstObject[targetKey]);
-                            });
-                        }
-//Bug States Anfang
-                        if (state === "courseFL24inchBaseTitan") {
-                            Object.keys(deviceModel["Course"]).forEach( async (key) => {
-                                common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
-                            });
-                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
-                        }
-                        if (state === "smartCourseFL24inchBaseTitan" ||
-                            state === "downloadedCourseFL24inchBaseTitan") {
-                                Object.keys(deviceModel["SmartCourse"]).forEach( async (key) => {
-                                    common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
-                                });
-                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
-                        }
-                        if (deviceModel["MonitoringValue"][state]["valueMapping"]) {
-                            if (deviceModel["MonitoringValue"][state]["valueMapping"].max) {
-                                common.min = 0; // deviceModel["MonitoringValue"][state]["valueMapping"].min; //reseverdhour has wrong value
-                                common.max = deviceModel["MonitoringValue"][state]["valueMapping"].max;
-                            } else {
-                                const values = Object.keys(deviceModel["MonitoringValue"][state]["valueMapping"]);
-                                values.forEach((value) => {
-                                    if (deviceModel["MonitoringValue"][state]["valueMapping"][value].label !== undefined) {
-                                        const valueMap = deviceModel["MonitoringValue"][state]["valueMapping"][value];
-                                        if (onlynumber.test(value)) {
-                                            common.states[valueMap.index] = valueMap.label;
-                                        } else {
-                                            common.states[value] = valueMap.index;
-                                        }
-                                    } else {
-                                        common.states[value] = value;
-                                    }
-//Bug States Ende
-                                });
-                            }
-                        }
-                        if (!obj) {
-                            // @ts-ignore
-                            await this.setObjectNotExistsAsync(path + state, {
-                                type: "state",
-                                common: common,
-                                native: {},
-                            }).catch((error) => {
-                                this.log.error(error);
-                            });
-                        } else {
-                            // @ts-ignore
-                            this.extendObject(path + state, {
-                                common: common,
-                            });
-                        }
-                    });
-                });
-            deviceModel["Value"] &&
-                Object.keys(deviceModel["Value"]).forEach((state) => {
-                    this.getObject(path + state, async (err, obj) => {
-                        if (obj) {
-                            const common = obj.common;
-                            common.states = {};
-                            let valueObject = deviceModel["Value"][state]["option"];
-                            if (deviceModel["Value"][state]["value_mapping"]) {
-                                valueObject = deviceModel["Value"][state]["value_mapping"];
-                            }
-                            if (valueObject) {
-                                if (valueObject.max) {
-                                    common.min = 0; // deviceModel["MonitoringValue"][state]["valueMapping"].min; //reseverdhour has wrong value
-                                    common.max = valueObject.max;
-                                } else {
-                                    const values = Object.keys(valueObject);
-                                    values.forEach((value) => {
-                                        const content = valueObject[value];
-                                        if (typeof content === "string") {
-                                            common.states[value] = content.replace("@", "");
-                                        }
-                                    });
-                                }
-                            }
-                            // @ts-ignore
-                            await this.setObjectNotExistsAsync(path + state, {
-                                type: "state",
-                                common: common,
-                                native: {},
-                            }).catch((error) => {
-                                this.log.error(error);
-                            });
+        await this.setObjectNotExists('DECT_Control.sendorder', {
+            type: "state",
+            common: {
+                name: "e. g. switchcmd=setsimpleonoff&ain=130770012360",
+                type: "string",
+                role: "value",
+                write: true,
+                read: true,
+            },
+            native: {},
+        });
 
-                            // @ts-ignore
-                            this.extendObject(path + state, {
-                                common: common,
-                            });
-                        }
-                    });
-                });
-        }
+        await this.setObjectNotExists('DECT_Control.cleanup', {
+            type: "state",
+            common: {
+                name: "Cleanup Object Tree",
+                type: "boolean",
+                role: "button",
+                write: true,
+                read: true,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExists('DECT_Control.fritzfw', {
+            type: "state",
+            common: {
+                name: "Actual Fritzbox Firmware",
+                type: "mixed",
+                role: "info",
+                write: false,
+                read: true,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExists('DECT_Control.fritzsid', {
+            type: "state",
+            common: {
+                name: "Actual Fritzbox SID",
+                type: "string",
+                role: "info",
+                write: false,
+                read: true,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExists('DECT_Control.fritzsidTimestamp', {
+            type: "state",
+            common: {
+                name: "Created Timestamp Fritzbox SID",
+                type: "number",
+                role: "indicator.date",
+                write: false,
+                read: true,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExists('DECT_Control.fritzsidTime', {
+            type: "state",
+            common: {
+                name: "Created Time Fritzbox SID",
+                type: "string",
+                role: "info",
+                write: false,
+                read: true,
+            },
+            native: {},
+        });
     }
 
-    async sendCommandToDevice(deviceId, values, thinq1) {
-        const headers = this.defaultHeaders;
-        let controlUrl = this.resolveUrl(this.gateway.thinq2Uri + "/", "service/devices/" + deviceId + "/control-sync");
-        let data = {
-            ctrlKey: "basicCtrl",
-            command: "Set",
-            ...values,
-        };
-        if (thinq1) {
-            controlUrl = this.gateway.thinq1Uri + "/" + "rti/rtiControl";
-            data = values;
-        }
-
-       this.log.debug(JSON.stringify(data));
-
-        return this.requestClient
-            .post(controlUrl, data, { headers })
-            .then((resp) => resp.data)
+    /**
+     * Fritzbox!
+     * Login, send and check sid Fritzbox
+     * @param for switch
+     * @param post param
+     * @param send param
+     */
+    async Fritzbox(check, sendpost, sendvalue) {
+        this.log.debug("Fritzbox Parameter check " + check);
+        const resid = await this.requestClient
+            .post(this.config.ip + '/login_sid.lua?version=2', qs.stringify(sendpost), this.Headers)
+            .then((res) => res.data)
             .catch((error) => {
                 this.log.error(error);
             });
+        this.log.debug("Data Fritzbox " + resid);
+        if (resid) {
+            try {
+                parser.parseString(resid, async (err, result) => {
+                    let hashsid = null;
+                    const home = (resid.includes('HomeAuto')) ? true : false;
+                    const pbkf2 = (result.SessionInfo.Challenge.indexOf("2$") === 0) ? true : false
+                    this.xmlvalue = {sid: result.SessionInfo.SID, blocktime: parseFloat(result.SessionInfo.BlockTime), pbkf2: pbkf2, homeauto: home  };
+                    switch (check) {
+                        case "start":
+                            this.log.info("Start Adapter.");
+                            if (result.SessionInfo.SID === "0000000000000000") {
+                                if (pbkf2) {
+                                    hashsid = await this.create_pbkdf2(result.SessionInfo.Challenge, this.config.password);
+                                } else {
+                                    hashsid = await this.create_md5(result.SessionInfo.Challenge, this.config.password);
+                                }
+                                hashsid = { username: this.config.username, response: hashsid };
+                                if (this.xmlvalue.blocktime > 0) await this.sleep(this.xmlvalue.blocktime * 1000)
+                                this.Fritzbox("login", hashsid, sendvalue);
+                            } else {
+                                this.log.info("Can't find the fritzbox! " + err);
+                            }
+                            break;
+                        case "login":
+                            this.log.info("Login");
+                            if (result.SessionInfo.SID === "0000000000000000") {
+                                this.log.info("Login ivalid! Wrong username or password!");
+                                this.setState("info.connection", false, true);
+                                return;
+                            } else {
+                                this.log.info("Login success with SID: " + this.xmlvalue.sid);
+                                const date_ob = new Date();
+                                const date = ("0" + date_ob.getDate()).slice(-2);
+                                const month = ("0" + (date_ob.getMonth() + 1)).slice(-2);
+                                const d_format = date + "." + month + "." + date_ob.getFullYear() + " " + date_ob.getHours() + ":" + date_ob.getMinutes() + ":" + date_ob.getSeconds();
+                                const c_time = Math.floor(date_ob / 1000);
+                                await this.createDataPoint('DECT_Control.fritzsid', 'Actual Fritzbox SID', 'info', 'string', false, this.xmlvalue.sid);
+                                await this.createDataPoint('DECT_Control.fritzsidTimestamp', 'Created Timestamp Fritzbox SID', 'info', 'number', false, c_time);
+                                await this.createDataPoint('DECT_Control.fritzsidTime', 'Created Time Fritzbox SID', 'info', 'string', false, d_format);
+                                if (this.xmlvalue.homeauto === false) {
+                                    this.log.error("User does not have access to DECT Devices!!");
+                                    this.setState("info.connection", false, true);
+                                    return;
+                                }
+                                this.setState("info.connection", true, true);
+                                if (sendvalue !== undefined) {
+                                    this.Fritzboxsend(sendvalue);
+                                    return;
+                                } else {
+                                    this.Fritzboxdevice();
+                                    this.Fritzboxtemplates();
+                                    return;
+                                }
+                            }
+                            break;
+                        case "check":
+                            if (result.SessionInfo.SID === this.xmlvalue.sid) {
+                                this.log.debug("SID is valid");
+                                this.Fritzboxdevice();
+                                return;
+                            } else {
+                                if (this.xmlvalue.blocktime > 0) await this.sleep(this.xmlvalue.blocktime * 1000)
+                                this.Fritzbox("start", this.name);
+                                return;
+                            }
+                            break;
+                        case "send":
+                            if (result.SessionInfo.SID === this.xmlvalue.sid) {
+                                this.log.debug("SID is valid for send order");
+                                this.Fritzboxsend(sendvalue);
+                                return;
+                            } else {
+                                if (this.xmlvalue.blocktime > 0) await this.sleep(this.xmlvalue.blocktime * 1000)
+                                this.Fritzbox("start", this.name, sendvalue);
+                                return;
+                            }
+                            break;
+                        case "templates":
+                            if (result.SessionInfo.SID === "0000000000000000") {
+                                this.log.info("Temülate check: SID ivalid!");
+                                this.setState("info.connection", false, true);
+                                return;
+                            } else {
+                                this.log.info("Update Templates!");
+                                this.Fritzboxtemplates();
+                                this.deleteoldobjects();
+                                return;
+                            }
+                            break;
+                        case "dectstate":
+                            this.readsubscriptionstate();
+                            return;
+                            break;
+                        case "cleanup":
+                            this.deleteoldobjects();
+                            return;
+                            break;
+                        case "logout":
+                            if (result.SessionInfo.SID === "0000000000000000") {
+                                this.log.info("Logout successfully!");
+                            } else {
+                                this.log.info("Logout not successfully!");
+                            }
+                            break;
+                        default:
+                            this.log.error("Command " + check + " not found");
+                            break;
+                    }
+                });
+            } catch (e) {
+                this.log.error('Parse error: ' + e);
+            }
+        } else {
+            this.log.error('Fritzbox does not answer!');
+        }
     }
-    sleep(ms) {
-        return new Promise((resolve) => {
-            this.sleepTimer = setTimeout(resolve, ms);
+
+    /**
+     * createFolder!
+     * @param ident Folder ID
+     * @param name Foldername
+     */
+    createFolder(ident, name, icon) {
+        return new Promise(resolve => {
+            this.getForeignObject(this.namespace + '.' + ident, async (err, obj) => {
+                const com = {
+                    name: name,
+                    write: false,
+                    read: true,
+                }
+                if (icon !== null) com.icon = icon;
+                this.setObjectNotExistsAsync(ident, {
+                    type: "channel",
+                    common:com,
+                    native: {},
+                })
+                .then(() => {
+                resolve(true);
+                })
+                .catch((error) => {
+                    this.log.error(error);
+                });
+            });
         });
     }
+
+    /**
+     * createDataPoint!
+     * @param ident DataPoint ID
+     * @param name DataPoint Name
+     */
+    createDataPoint(ident, name, role, type, write, value) {
+        return new Promise(resolve => {
+            this.getForeignObject(this.namespace + '.' + ident, async (err, obj) => {
+                if (!obj) {
+                    this.setObjectNotExistsAsync(ident, {
+                        type: "state",
+                        common: {
+                            name: name,
+                            role: role,
+                            type: type,
+                            write: write,
+                            read: true,
+                        },
+                        native: {},
+                    })
+                    .then(() => {
+                    this.setStateAsync(ident, {
+                        val: value,
+                        ack: true
+                    });
+                    resolve(true);
+                    })
+                    .catch((error) => {
+                        this.log.error(error);
+                    });
+                } else {
+                    this.setStateAsync(ident, {
+                        val: value,
+                        ack: true
+                    });
+                    resolve(true);
+                }
+            });
+        });
+    }
+
+    /**
+     * insertValue!
+     * @param ident DataPoint ID
+     * @param value
+     */
+    insertValue(ident, value) {
+        return new Promise(resolve => {
+            this.getForeignObject(this.namespace + '.' + ident, async (err, obj) => {
+                if (obj) {
+                    this.setStateAsync(ident, {
+                        val: value,
+                        ack: true
+                    });
+                    resolve(true);
+                } else {
+                    resolve(false);
+                }
+            });
+        });
+    }
+
+    /**
+     * Fritzboxtemplates!
+     * create and update Template devices
+     */
+    async Fritzboxtemplates() {
+        if (this.xmlvalue.sid === "0000000000000000") {
+            this.setState("info.connection", false, true);
+            this.log.error("Missing SID!! - Fritzboxtemplates: " + this.xmlvalue.sid);
+            return;
+        }
+        const resid = await this.requestClient
+            .get(this.config.ip + '/webservices/homeautoswitch.lua?switchcmd=gettemplatelistinfos&sid=' + this.xmlvalue.sid)
+            .then((res) => res.data)
+            .catch((error) => {
+                this.log.error("GET Fritzboxtemplates: " + error);
+            });
+        if (resid === undefined) {
+            this.log.error('Update Template: Fritzbox not available. Restart over Fritzboxdevice');
+            return;
+        }
+        let dectdata = resid.toString("utf-8").trim().replace(/\applymask=/g, 'mask=');
+        let dpname        = null;
+        let ident         = null;
+        let devids        = null;
+        this.alltemplates = {};
+        let db  = null;
+        let maskids = null;
+        this.log.debug(JSON.stringify(dectdata));
+        if (this.isXMLString(dectdata) && (dectdata !== null || dectdata !== undefined)) {
+            try {
+                parser.parseString(dectdata, async (err, result) => {
+                    if (result.templatelist.template.identifier !== undefined) {
+                        this.log.debug("Single: " + JSON.stringify(result.templatelist.template));
+                        ident = result.templatelist.template.identifier.replace(/\s/g, '').replace(/\-1/g, '');
+                        dpname = result.templatelist.template.name;
+                        await this.createFolder('TEMP_' + ident, dpname, "/icons/template.png");
+                        await this.createDataPoint('TEMP_' + ident + '.toogle', 'Toogle aktivieren/deaktivieren', 'button', 'boolean', true);
+                        Object.keys(result.templatelist.template).forEach( async (key) => {
+                            if (key === "devices") {
+                                Object.keys(result.templatelist.template[key]).forEach( async (dev) => {
+                                    if (dev === "device") {
+                                        if (result.templatelist.template[key][dev].identifier !== undefined) {
+                                            devids = result.templatelist.template[key][dev].identifier;
+                                        } else {
+                                            Object.keys(result.templatelist.template[key][dev]).forEach( async (devid) => {
+                                                if (devids === null) {
+                                                    devids = result.templatelist.template[key][dev][devid].identifier;
+                                                } else {
+                                                    devids += ", " + result.templatelist.template[key][dev][devid].identifier;
+                                                }
+                                            });
+                                        }
+                                    }
+                                });
+                                result.templatelist.template[key] = devids;
+                            } else if (key === "applymask") {
+                                Object.keys(result.templatelist.template[key]).forEach( async (mask) => {
+                                    if (maskids === null) {
+                                        maskids = mask;
+                                    } else {
+                                        maskids += ", " + mask;
+                                    }
+                                });
+                                result.templatelist.template[key] = maskids;
+                            }
+                            this.alltemplates[ident] = true;
+                            db = await this.createDataPoint('TEMP_' + ident + '.' + key, key, 'info', typeof result.templatelist.template[key], false);
+                            db = await this.insertValue('TEMP_' + ident + '.' + key, result.templatelist.template[key]);
+                        });
+                    } else {
+                        Object.keys(result.templatelist.template).forEach(async (n) => {
+                            this.log.debug("Multi: " + JSON.stringify(result.templatelist.template[n]));
+                            maskids = null;
+                            devids = null;
+                            dpname = result.templatelist.template[n].name;
+                            ident = result.templatelist.template[n].identifier.replace(/\s/g, '').replace(/\-1/g, '');
+                            dpname = result.templatelist.template[n].name;
+                            db = this.createFolder('TEMP_' + ident, dpname, "/icons/template.png");
+                            db = this.createDataPoint('TEMP_' + ident + '.toogle', 'Toogle aktivieren/deaktivieren', 'button', 'boolean', true);
+                            this.alltemplates[ident] = true;
+                            Object.keys(result.templatelist.template[n]).forEach( async (key) => {
+                                if (key === "devices") {
+                                    Object.keys(result.templatelist.template[n][key]).forEach( async (dev) => {
+                                        if (dev === "device") {
+                                            if (result.templatelist.template[n][key][dev].identifier !== undefined) {
+                                                devids = result.templatelist.template[n][key][dev].identifier;
+                                            } else {
+                                                Object.keys(result.templatelist.template[n][key][dev]).forEach( async (devid) => {
+                                                    if (devids === null) {
+                                                        devids = result.templatelist.template[n][key][dev][devid].identifier;
+                                                    } else {
+                                                        devids += ", " + result.templatelist.template[n][key][dev][devid].identifier;
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    });
+                                    result.templatelist.template[n][key] = devids;
+                                } else if (key === "applymask") {
+                                    Object.keys(result.templatelist.template[n][key]).forEach( async (mask) => {
+                                        if (maskids === null) {
+                                            maskids = mask;
+                                        } else {
+                                            maskids += ", " + mask;
+                                        }
+                                    });
+                                    result.templatelist.template[n][key] = maskids;
+                                }
+                                db = await this.createDataPoint('TEMP_' + ident + '.' + key, key, 'info', typeof result.templatelist.template[n][key], false, result.templatelist.template[n][key]);
+                            });
+                        });
+                    }
+                });
+            } catch (e) {
+                this.log.error('Parse error: ' + e);
+            }
+        }
+    }
+
+    /**
+     * Fritzboxdevice!
+     * create and update DECT devices
+     */
+    async Fritzboxdevice() {
+        if (this.xmlvalue.sid === "0000000000000000") {
+            this.setState("info.connection", false, true);
+            this.log.error("Missing SID!! - Fritzboxdevice: " + this.xmlvalue.sid);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+        const resid = await this.requestClient
+            .get(this.config.ip + '/webservices/homeautoswitch.lua?switchcmd=getdevicelistinfos&sid=' + this.xmlvalue.sid)
+            .then((res) => res)
+            .catch((error) => {
+                this.log.error("GET Fritzboxdevice: " + error);
+            });
+
+        if (resid.status !== 200) {
+            this.log.error('Fritzboxdevice: Response from Fritzbox: ' + resid.status);
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        } else if (resid.data === undefined) {
+            this.log.error('Fritzboxdevice: Date from Fritzbox are undefined!!');
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+
+        let dectdata = resid.data.toString("utf-8").trim();
+        let bitmask    = null;
+        let ident      = null;
+        let fw_str     = null;
+        let online     = true;
+        let difference = false;
+        let sleepT     = this.config.dect_int_sec * 1000;
+        let isblind    = 0;
+        if (dectdata.includes('<group')) dectdata = dectdata.replace(/\<group/g, '<device').replace(/\<\/group/g, '</device')
+        this.log.debug(JSON.stringify(dectdata));
+        if (dectdata !== this.valuecheck || this.start === null) {
+            this.log.debug("Unterschied");
+            difference = true;
+        } else {
+            this.log.debug("Kein Unterschied");
+        }
+        if (this.isXMLString(dectdata) && difference && (dectdata !== null || dectdata !== undefined)) {
+            try {
+                parser.parseString(dectdata, async (err, result) => {
+                    dectdata = null;
+                    if (result.devicelist.device !== undefined) {
+                        if (this.start === null) {
+                            this.start = 1;
+                            this.strcheck = JSON.parse(JSON.stringify(result.devicelist));
+                            this.createDataPoint('DECT_Control.fritzfw', 'Actual Fritzbox Firmware', 'info', 'mixed', false, result.devicelist.fwversion);
+                        } else {
+                            this.start = 2;
+                        }
+                        if (result.devicelist.device.identifier !== undefined) {
+                            bitmask = result.devicelist.device.functionbitmask;
+                            if (bitmask === "1") {
+                                fw_str = result.devicelist.device.fwversion;
+                            } else {
+                                isblind = 0;
+                                if (bitmask === "335888") isblind = 1;
+                                if (result.devicelist.device.present === 0) online = false;
+                                if (fw_str) {
+                                    result.devicelist.device.fwversion = fw_str;
+                                    fw_str = null;
+                                }
+                                ident = result.devicelist.device.identifier.replace(/\s/g, '').replace(/\-1/g, '');
+                                if (this.start === 1) {
+                                    this.createDP.parse(isblind, result.devicelist.device, 'DECT_' + ident, result.devicelist.device);
+                                } else {
+                                    if (this.allobjects['DECT_' + ident] && online) {
+                                        this.updateDP.parse(this.allobjectsid, isblind, this.strcheck.device, 'DECT_' + ident, result.devicelist.device);
+                                    }
+                                }
+                            }
+                        } else {
+                            Object.keys(result.devicelist.device).forEach((n) => {
+                                bitmask = result.devicelist.device[n].functionbitmask;
+                                if (bitmask === "1") {
+                                    fw_str = result.devicelist.device[n].fwversion;
+                                } else {
+                                    isblind = 0;
+                                    if (bitmask === "335888") isblind = 1;
+                                    if (result.devicelist.device[n].present === 0) online = false;
+                                    if (fw_str) {
+                                        result.devicelist.device[n].fwversion = fw_str;
+                                        fw_str = null;
+                                    }
+                                    ident = result.devicelist.device[n].identifier.replace(/\s/g, '').replace(/\-1/g, '');
+                                    if (this.start === 1) {
+                                        this.createDP.parse(isblind, result.devicelist.device[n], 'DECT_' + ident, result.devicelist.device[n]);
+                                    } else {
+                                        if (this.allobjects['DECT_' + ident] && online) {
+                                            this.updateDP.parse(this.allobjectsid, isblind, this.strcheck.device[n], 'DECT_' + ident, result.devicelist.device[n]);
+                                        }
+                                        online = true;
+                                    }
+                                }
+                            });
+                        }
+                        this.strcheck = JSON.parse(JSON.stringify(result.devicelist));
+                        result = null;
+                    }
+                });
+            } catch (e) {
+                this.log.error('Parse error: ' + e);
+            }
+            if (this.start === 1) sleepT = 5000;
+            await this.sleep(sleepT);
+            if (this.start === 1) this.startreadallobjects();
+            if (this.config.extendForeign) {
+                try {
+                    await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {native: {extendForeign: false}});
+                } catch (e) {
+                    this.log.error("Could not set extendForeign: " + e.message);
+                }
+            }
+            this.check = { username: this.config.username, sid: this.xmlvalue.sid };
+            this.Fritzbox("check", this.check);
+        } else {
+            await this.sleep(sleepT);
+            if (this.start === 1) this.startreadallobjects();
+            this.check = { username: this.config.username, sid: this.xmlvalue.sid };
+            this.Fritzbox("check", this.check);
+        }
+    }
+
+    /**
+     * startreadallobjects! Read object tree start
+     */
+    async startreadallobjects() {
+        this.allobjectsid = await this.readallobjects();
+    }
+
+    /**
+     * readallobjects! Read object tree
+     */
+    readallobjects() {
+        this.allobjectsid = '';
+        let ids = '';
+        return new Promise(resolve => {
+            this.getForeignObjects(this.namespace + '.*',(err, obj) => {
+                if (err) {
+                    this.log.debug("Read Object: " + err);
+                    resolve(this.allobjectsid);
+                } else {
+                    Object.keys(obj).forEach((key) => {
+                        ids += key + "|";
+                        key = key.split(".")[2];
+                        this.allobjects[key] = true;
+                    });
+                    resolve(ids);
+                }
+            });
+        });
+    }
+
+    /**
+     * deleteoldobjects! Delete old channels
+     */
+    deleteoldobjects() {
+        if ((this.allobjects) && (this.strcheck)) {
+            let searchStr = '';
+            const isStr   = JSON.stringify(this.strcheck).toString().replace(/\s/g, '') + JSON.stringify(this.alltemplates);
+            Object.keys(this.allobjects).forEach((key) => {
+                searchStr = key.replace(/\DECT_/g, '').replace(/\TEMP_/g, '');
+                if (isStr.includes(searchStr) || key === "DECT_Control") {
+                    this.log.info("This folder will not be deleted: " + key);
+                } else {
+                    if (key !== undefined) {
+                        this.log.warn("This folder will be deleted: " + key);
+                        this.delForeignObject(key);
+                    }
+                }
+            });
+        }
+    }
+
+    /**
+     * Fritzboxsend!
+     * @param send param
+     */
+    async Fritzboxsend(sendvalue) {
+        if (this.xmlvalue.sid === "0000000000000000") {
+            this.setState("info.connection", false, true);
+            this.log.error("Missing SID!! - Fritzboxsend: " + this.xmlvalue.sid);
+            this.Fritzbox("start", this.name, sendvalue);
+            return;
+        }
+        const resid = await this.requestClient
+            .get(this.config.ip + '/webservices/homeautoswitch.lua?' + sendvalue + '&sid=' + this.xmlvalue.sid)
+            .then((res) => res)
+            .catch((error) => {
+                this.log.error("GET SEND: " + error);
+            });
+        try {
+            if (resid.status !== 200) {
+                this.log.error('Fritzboxsend: Response from Fritzbox: ' + resid.status);
+                this.Fritzbox("start", this.name, sendvalue);
+                return;
+            } else if (resid.data === undefined) {
+                this.log.error('Fritzboxsend: Date from Fritzbox are undefined!!');
+                this.Fritzbox("start", this.name, sendvalue);
+                return;
+            }
+            this.log.info("Send: " + resid.data); //Wenn Wert dann OK
+        } catch (e) {
+            this.log.error('Send error: ' + e);
+        }
+    }
+
+    /**
+     * isXMLString!
+     * @param xml string
+     */
+    isXMLString(str) {
+        try {
+            parser.parseString(str);
+        } catch (e) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Sleep!
+     * @param millisecond
+     */
+    sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Create pbkdf2 hash
+     * @param challenge
+     * @param password
+     * def calculate_pbkdf2_response(challenge: str, password: str) -> str: 
+     * """ Calculate the response for a given challenge via PBKDF2 """ 
+     * challenge_parts = challenge.split("$") 
+     * # Extract all necessary values encoded into the challenge 
+     * iter1 = int(challenge_parts[1]) 
+     * salt1 = bytes.fromhex(challenge_parts[2]) 
+     * iter2 = int(challenge_parts[3]) 
+     * salt2 = bytes.fromhex(challenge_parts[4]) 
+     * # Hash twice, once with static salt... 
+     * hash1 = hashlib.pbkdf2_hmac("sha256", password.encode(), salt1, iter1) 
+     * # Once with dynamic salt. 
+     * hash2 = hashlib.pbkdf2_hmac("sha256", hash1, salt2, iter2) 
+     * return f"{challenge_parts[4]}${hash2.hex()}" 
+     */
+    create_pbkdf2(challenge, password) {
+        const challenge_parts = challenge.split('$');
+        const iter1 = Math.floor(challenge_parts[1]);
+        const salt1 = Buffer.from(challenge_parts[2], 'hex');
+        const iter2 = Math.floor(challenge_parts[3]);
+        const salt2 = Buffer.from(challenge_parts[4], 'hex');
+        const hash1 = crypto.pbkdf2Sync(password, salt1, iter1, 32, 'sha256');
+        const hash2 = crypto.pbkdf2Sync(hash1, salt2, iter2, 32, 'sha256');
+        return challenge_parts[4] + '$' + hash2.toString('hex');
+    }
+
+    /**
+     * Create MD5 hash
+     * @param challenge
+     * @param password
+     * def calculate_md5_response(challenge: str, password: str) -> str: 
+     * """ Calculate the response for a challenge using legacy MD5 """ 
+     * response = challenge + "-" + password 
+     * # the legacy response needs utf_16_le encoding 
+     * response = response.encode("utf_16_le") 
+     * md5_sum = hashlib.md5() 
+     * md5_sum.update(response) 
+     * response = challenge + "-" + md5_sum.hexdigest() 
+     * return response 
+     */
+    create_md5(challenge, password) {
+        const md5_sum = crypto.createHash('md5').update(Buffer.from(challenge + '-' + password, 'utf16le')).digest('hex');
+        const response = challenge + '-' + md5_sum;
+        return response;
+    }
+
+    /**
+     * Alexa RGB Colors
+     * @param RGB
+     */
+    colors(rgb) {
+        /**
+        *    Blau       #0000ff
+        *    Blauer
+        *    Rot        #ff0000
+        *    Roter
+        *    Magenta    #ff00ff
+        *    Gold#ffd500
+        *    Silber#bfbfbf
+        *    Purpur
+        *    Lachs
+        *    Orange     #ffa600
+        *    Gelb       #ffff00
+        *    Gelber
+        *    Grün       #00ff00
+        *    Grüner
+        *    Türkis     #3fe0d0
+        *    Himmelblau #87ceea
+        *    Lila       #ed82ed
+        *    Pink       #ffbfcc
+        *    Rosa       #eebbcc
+        *    Lavendel#c0a8e4
+        */
+        const colors = {
+            "#ff0000"   : {"dect" : 358, "sat" : [180,112,54], "unm" : [255,255,255], "deb" : ["Rot","Rot hell","Rot heller"] },
+            "#ffa600"   : {"dect" : 35,  "sat" : [214,140,72], "unm" : [252,252,255], "deb" : ["Orange","Orange hell","Orange heller"] }, /*orange*/
+            "#ffff00"   : {"dect" : 52,  "sat" : [153,102,51], "unm" : [255,255,255], "deb" : ["Gelb","Gelb hell","Gelb heller"] }, /*yellow*/
+            "#c7ff1f"   : {"dect" : 92,  "sat" : [123, 79,38], "unm" : [248,250,252], "deb" : ["Limette","Limette hell","Limette heller"] }, /*lime*/
+            "#7efc00"   : {"dect" : 92,  "sat" : [123, 79,38], "unm" : [248,250,252], "deb" : ["Grasgrün","Grasgrün hell","Grasgrün heller"] }, /*grasgreen*/
+            "#00ff00"   : {"dect" : 120, "sat" : [160, 82,38], "unm" : [220,232,242], "deb" : ["Grün","Grün hell","Grün heller"] }, /*green*/
+            "#8eed8e"   : {"dect" : 160, "sat" : [145, 84,41], "unm" : [235,242,248], "deb" : ["Hellgrün","Hellgrün hell","Hellgrün heller"] }, /*lightgreen*/
+            "#3fe0d0"   : {"dect" : 160, "sat" : [145, 84,41], "unm" : [235,242,248], "deb" : ["Türkis","Türkis hell","Türkis heller"] }, /*turpuoise*/
+            "#333333"   : {"dect" : 195, "sat" : [179,118,59], "unm" : [255,255,255], "deb" : ["Cyan","Cyan hell","Cyan heller"] }, /*cyan*/
+            "#add8e5"   : {"dect" : 212, "sat" : [169,110,56], "unm" : [252,252,255], "deb" : ["Hellblau","Hellblau hell","Hellblau heller"] }, /*lightblue*/
+            "#87ceea"   : {"dect" : 212, "sat" : [169,110,56], "unm" : [252,252,255], "deb" : ["Himmelblau","Himmelblau hell","Himmelblau heller"] }, /*skyblue*/
+            "#0000ff"   : {"dect" : 225, "sat" : [204,135,67], "unm" : [255,255,255], "deb" : ["Blau","Blau hell","Blau heller"] }, /*blue*/
+            "#ed82ed"   : {"dect" : 266, "sat" : [169,110,54], "unm" : [250,250,252], "deb" : ["Lila","Lila hell","Lila heller"] }, /*puple*/
+            "#ff00ff"   : {"dect" : 296, "sat" : [140, 92,46], "unm" : [250,252,255], "deb" : ["Magenta","Magenta hell","Magenta heller"] }, /*magenta*/
+            "#eebbcc"   : {"dect" : 296, "sat" : [140, 92,46], "unm" : [250,252,255], "deb" : ["Rosa","Rosa hell","Rosa heller"] }, /*magenta*/
+            "#ffbfcc"   : {"dect" : 335, "sat" : [180,107,51], "unm" : [255,248,250], "deb" : ["Pink","Pink hell","Pink heller"] }  /*pink*/
+        }
+        const col = colors[rgb.toString().toLowerCase()];
+        if (typeof col != 'undefined') {
+            return [col.dect, col.sat[0]];
+        } else {
+            return [358, 180];
+        }
+    }
+
     /**
      * Is called when adapter shuts down - callback has to be called under any circumstances!
      * @param {() => void} callback
      */
     onUnload(callback) {
         try {
-            this.updateInterval && clearInterval(this.updateInterval);
-            this.refreshTokenInterval && clearInterval(this.refreshTokenInterval);
-            this.refreshTimeout && clearTimeout(this.refreshTimeout);
-            this.sleepTimer && clearTimeout(this.sleepTimer);
+            const fritzlogout = { logout: "logout", sid: this.xmlvalue.sid };
+            this.Fritzbox("logout", fritzlogout);
+            clearInterval(this.updateInterval);
+            clearInterval(this.updateTemplateInterval);
+            clearInterval(sidcheck);
             callback();
         } catch (e) {
             callback();
+        }
+    }
+
+    /**
+     * readsubscriptionstate
+     */
+    async readsubscriptionstate() {
+        this.log.info("Load subscription state");
+        if (this.xmlvalue.sid === "0000000000000000") {
+            this.setState("info.connection", false, true);
+            this.log.error("Missing SID!! - readsubscriptionstate: " + this.xmlvalue.sid);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+        const resid = await this.requestClient
+            .get(this.config.ip + '/webservices/homeautoswitch.lua?switchcmd=getsubscriptionstate&sid=' + this.xmlvalue.sid)
+            .then((res) => res)
+            .catch((error) => {
+                this.log.error("GET readsubscriptionstate: " + error);
+            });
+
+        if (resid.status !== 200) {
+            this.log.error('readsubscriptionstate: Response from Fritzbox: ' + resid.status);
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        } else if (resid.data === undefined) {
+            this.log.error('readsubscriptionstate: Date from Fritzbox are undefined!!');
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+
+        let dectdata = resid.data.toString("utf-8").trim();
+        this.log.debug(JSON.stringify(dectdata));
+        if (this.isXMLString(dectdata) && (dectdata !== null || dectdata !== undefined)) {
+            try {
+                parser.parseString(dectdata, async (err, result) => {
+                   this.log.debug(JSON.stringify(result.state.code) + "-" + result.state.latestain);
+                    await this.setObjectNotExistsAsync('DECT_Control.DECT', {
+                        type: "channel",
+                        common: {
+                            name: "DECT connect state",
+                            role: "state",
+                        },
+                        native: {},
+                    });
+
+                    await this.setObjectNotExists('DECT_Control.DECT.state', {
+                        type: "state",
+                        common: {
+                            name: "startulesubscription",
+                            type: "number",
+                            role: "info",
+                            write: false,
+                            read: true,
+                            states: {
+                                "0": "Anmeldung lÃ¤uft nicht",
+                                "1": "Anmeldung lÃ¤uft",
+                                "2": "timeout",
+                                "3": "sonstiger Error Unterknoten"
+                            }
+                        },
+                        native: {},
+                    })
+
+                    await this.setObjectNotExists('DECT_Control.DECT.latestain', {
+                        type: "state",
+                        common: {
+                            name: "Latest AIN",
+                            type: "string",
+                            role: "info",
+                            write: false,
+                            read: true
+                        },
+                        native: {},
+                    })
+                    this.insertValue('DECT_Control.DECT.state', result.state.state);
+                    this.insertValue('DECT_Control.DECT.latestain', result.state.latestain);
+                });
+            } catch (e) {
+                this.log.error('Parse error: ' + e);
+            }
+        }
+    }
+
+    /**
+     * loadvalues!
+     * @param id - Object
+     * @param cmd - Value for switchcmd
+     */
+    async loadvalues(tem, id, cmd) {
+        if (this.xmlvalue.sid === "0000000000000000") {
+            this.setState("info.connection", false, true);
+            this.log.error("Missing SID!! - loadvalues: " + this.xmlvalue.sid);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+        const resid = await this.requestClient
+            .get(this.config.ip + '/webservices/homeautoswitch.lua?switchcmd=' + cmd + '&sid=' + this.xmlvalue.sid)
+            .then((res) => res)
+            .catch((error) => {
+                this.log.error("GET loadvalues: " + error);
+            });
+
+        if (resid.status !== 200) {
+            this.log.error('loadvalues: Response from Fritzbox: ' + resid.status);
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        } else if (resid.data === undefined) {
+            this.log.error('loadvalues: Date from Fritzbox are undefined!!');
+            await this.sleep(10000);
+            this.Fritzbox("start", this.name);
+            return;
+        }
+        let dectdata = resid.data.toString("utf-8").trim();
+        let folder     = '';
+        let foldername = '';
+        let counter    = '';
+        let colorname  = {};
+        this.log.debug("temp: " + JSON.stringify(dectdata));
+        if (this.isXMLString(dectdata) && (dectdata !== null || dectdata !== undefined)) {
+            try {
+                parser.parseString(dectdata, (err, result) => {
+                    if (tem === 1) {
+                        result = JSON.parse(JSON.stringify(result.devicestats.temperature).replace(/\_/g, 'value'));
+                        this.getlist.parse(id + ".temperatur", result);
+                    } else if (tem === 0) {
+                        dectdata = JSON.parse(JSON.stringify(result.devicestats.voltage).replace(/\_/g, 'value'));
+                        this.getlist.parse(id + ".voltage", dectdata.stats);
+                        dectdata = JSON.parse(JSON.stringify(result.devicestats.power).replace(/\_/g, 'value'));
+                        this.getlist.parse(id + ".power", dectdata.stats);
+                        dectdata = JSON.stringify(result.devicestats.energy).replace(/_/, 'wh');
+                        dectdata = JSON.parse(dectdata.replace(/_/, 'watt'));
+                        for(const val of dectdata.stats) {
+                            ++counter;
+                            if (counter === 1) folder = "watt";
+                            if (counter === 2) folder = "wh";
+                            this.getlist.parse(id + ".energy." + folder, val);
+                        }
+                   } else if (tem === 2) {
+                        Object.keys(result.colordefaults.hsdefaults.hs).forEach((n) => {
+                             Object.keys(result.colordefaults.hsdefaults.hs[n]).forEach((k) => {
+                                  if (k === "hue_index") folder = k + result.colordefaults.hsdefaults.hs[n][k];
+                                  if (k === "name") {
+                                       foldername = result.colordefaults.hsdefaults.hs[n][k]._;
+                                       this.createFolder(id + "." + folder, foldername, null);
+                                  }
+                                  if (Array.isArray(result.colordefaults.hsdefaults.hs[n][k])) {
+                                       for(const val of result.colordefaults.hsdefaults.hs[n][k]) {
+                                            this.getlist.parse(id + "." + folder + ".sat_index" + val.sat_index, val);
+                                       }
+                                  }
+                             });
+                        });
+                        if (Array.isArray(result.colordefaults.temperaturedefaults.temp)) {
+                             for(const val of result.colordefaults.temperaturedefaults.temp) {
+ 		                    if (val.value === "6500") colorname.tageslicht_3 = 6500;
+		                    else if (val.value === "5900") colorname.tageslicht_2 = 5900;
+		                    else if (val.value === "5300") colorname.tageslicht_1 = 5300;
+		                    else if (val.value === "4700") colorname.neutral_3 = 4700;
+		                    else if (val.value === "4200") colorname.neutral_2 = 4200;
+		                    else if (val.value === "3800") colorname.neutral_1 = 3800;
+		                    else if (val.value === "3400") colorname.warmweiss_3 = 3400;
+		                    else if (val.value === "3000") colorname.warmweiss_2 = 3000;
+                                  else colorname.warmweiss_1 = 2700;
+                             }
+                             this.getlist.parse(id + ".temperature", colorname);
+                        }
+                   }
+                   this.log.debug("Loadvalues: " + JSON.stringify(result));
+                });
+            } catch (e) {
+                this.log.error('Parse error: ' + e);
+            }
+        }
+    }
+
+    /**
+     * Is async for onStateChange
+     * @param {string} id
+     * @param {ioBroker.State | null | undefined} state
+     */
+    async sendcommand(id, state) {
+        try {
+            const lastsplit = id.split('.')[id.split('.').length-1];
+            const strcheck  = { username: this.config.username, sid: this.xmlvalue.sid };
+            let device      = id.split(".")[2];
+            let folder      = id.split(".")[3];
+            let dummy       = null;
+            let com         = false;
+            let sendstr     = null;
+            let obj         = {};
+            let secsplit    = id.split('.')[id.split('.').length-3];
+            let folderB     = id.split('.')[id.split('.').length-2];
+            let deviceId    = await this.getStateAsync(this.namespace + "." + device + ".identifier");
+            const present   = await this.getStateAsync(this.namespace + "." + device + ".present");
+            let actemp      = null;
+            deviceId        = encodeurl(deviceId.val);
+
+            if (!present.val) {
+                this.log.warn("Device " + device + " is offline");
+                return;
+            }
+
+            this.log.debug("SID: " + this.xmlvalue.sid);
+            this.log.debug("Folder: " + folder);
+            this.log.debug("Value: " + state.val);
+            this.log.debug("deviceId: " + deviceId);
+            this.log.debug("device: " + device);
+            if (lastsplit === "alexapower" ||
+                lastsplit === "alexamode" ||
+                lastsplit === "alexaparty" ||
+                lastsplit === "tsoll") {
+                const nexttemp = await this.getStateAsync(this.namespace + "." + device + ".hkr.nextchange.tchange");
+                const absenk   = await this.getStateAsync(this.namespace + "." + device + ".hkr.absenk");
+                const komfort  = await this.getStateAsync(this.namespace + "." + device + ".hkr.komfort");
+                if (nexttemp.val === absenk.val) actemp = komfort.val * 2;
+                else if (nexttemp.val === komfort.val) actemp = absenk.val * 2;
+                else actemp = absenk.val * 2;
+            }
+
+            switch (lastsplit) {
+                case "loadpowerstatic":
+                    this.loadvalues(0, device + '.devicestats', 'getbasicdevicestats&ain=' + deviceId);
+                    return;
+                    break;
+                case "loadtempstatic":
+                    this.loadvalues(1, device + '.devicestats', 'getbasicdevicestats&ain=' + deviceId);
+                    return;
+                    break;
+                case "loadcolor":
+                    this.loadvalues(2, device + '.devicecolor', 'getcolordefaults&ain=' + deviceId);
+                    return;
+                    break;
+                case "alexaonoff":
+                    if (state.val) {
+                        dummy = 1;
+                    } else {
+                        dummy = 0;
+                    }
+                    sendstr = 'ain=' + deviceId + '&switchcmd=setsimpleonoff&onoff=' + dummy;
+                    break;
+                case "alexapower":
+                    if (state.val) {
+                        dummy = actemp;
+                    } else {
+                        dummy = 253;
+                    }
+                    sendstr = 'ain=' + deviceId + '&switchcmd=sethkrtsoll&param=' + dummy;
+                    break;
+                case "alexamode":
+                    if (state.val === 0) {
+                        dummy = actemp;
+                    } else {
+                        dummy = 253;
+                    }
+                    sendstr = 'ain=' + deviceId + '&switchcmd=sethkrtsoll&param=' + dummy;
+                    break;
+                case "alexaparty":
+                    if (state.val) {
+                        dummy = 16;
+                    } else {
+                        dummy = actemp;
+                    }
+                    sendstr = 'ain=' + deviceId + '&switchcmd=sethkrtsoll&param=' + dummy;
+                    break;
+                case "tsoll":
+                    if (state.val > 7 && state.val < 32) dummy = state.val * 2;
+                    else if (state.val === 254 || state.val === 2) dummy = 254;
+                    else if (state.val === 0) {
+                        dummy = actemp;
+                    } else if (state.val === 253 || state.val === 1) dummy = 253;
+                    else if (typeof state.val === "string") {
+                        if (state.val === "true" || state.val.toLowerCase() === "on" || state.val.toLowerCase() === "open") dummy = 254;
+                        else if (state.val === "false" || state.val.toLowerCase() === "off" || state.val.toLowerCase() === "closed") dummy = 253;
+                        com = true;
+                    } else if (typeof state.val === "boolean") {
+                        if (state.val) dummy = 254;
+                        else if (state.val === false) dummy = 253;
+                        com = true;
+                    }
+                    this.log.debug("dummy: " + dummy);
+                    if (dummy > 0) {
+                        if (com) {
+                            obj = {
+                                "type": "state",
+                                "common": {
+                                     name: "Target Temperature",
+                                     role: "level.temperature",
+                                     type: "mixed",
+                                     write: true,
+                                     read: true
+                                },
+                                native: {}
+                            };
+                        } else {
+                            obj = {
+                                "type": "state",
+                                "common": {
+                                     name: "Target Temperature",
+                                     role: "level.temperature",
+                                     type: "mixed",
+                                     write: true,
+                                     read: true,
+                                     min: "-30",
+                                     max: 255,
+                                     unit: "Â°C"
+                                },
+                                native: {}
+                            };
+                        }
+                        this.setObject(id, obj);
+                        sendstr = 'ain=' + deviceId + '&switchcmd=sethkrtsoll&param=' + dummy;
+                    }
+                    break;
+                case "temperature":
+		    if (state.val > 6200) dummy = 6500;
+		    else if (state.val > 5600) dummy = 5900;
+		    else if (state.val > 5000) dummy = 5300;
+		    else if (state.val > 4500) dummy = 4700;
+		    else if (state.val > 4000) dummy = 4200;
+		    else if (state.val > 3600) dummy = 3800;
+		    else if (state.val > 3200) dummy = 3400;
+		    else if (state.val > 2850) dummy = 3000;
+                    else dummy = 2700;
+                    sendstr = 'ain=' + deviceId + '&switchcmd=setcolortemperature&temperature=' + dummy + '&duration=100';
+                    break;
+                case "huealexa":
+                    dummy = this.colors(state.val);
+                    sendstr = 'ain=' + deviceId + '&switchcmd=setcolor&hue=' + dummy[0] + '&saturation=' + dummy[1] + '&duration=100';
+                    break;
+
+                case "hue":
+                    const sat = await this.getStateAsync(this.namespace + "." + device + ".colorcontrol.saturation");
+                    sendstr = 'ain=' + deviceId + '&switchcmd=setcolor&hue=' + state.val + '&saturation=' + sat + '&duration=100';
+                    break;
+                case "level":
+                    if (state.val >= 0 && state.val <= 255) sendstr = 'ain=' + deviceId + '&switchcmd=setlevel&level=' + state.val;
+                    break;
+                case "levelpercentage":
+                    if (state.val >= 0 && state.val <= 100) sendstr = 'ain=' + deviceId + '&switchcmd=setlevelpercentage&level=' + state.val;
+                    break;
+                case "alexastop":
+                    if (state.val) sendstr = 'ain=' + deviceId + '&switchcmd=setblind&target=stop';
+                    break;
+                case "alexaopen":
+                    if (state.val) sendstr = 'ain=' + deviceId + '&switchcmd=setblind&target=open';
+                    break;
+                case "alexaclose":
+                    if (state.val) sendstr = 'ain=' + deviceId + '&switchcmd=setblind&target=close';
+                    break;
+                case "levelalexa":
+                    if (state.val >= 0 && state.val <= 100) dummy = 100 - state.val;
+                    if (dummy > 0) sendstr = 'ain=' + deviceId + '&switchcmd=setblind&target=' + dummy;
+                    break;
+                case "name":
+                    if (secsplit === "button") {
+                        const ident = id.substr(0, id.lastIndexOf('.'));
+                        dataid = await this.getStateAsync(ident + ".identifier");
+                        const obj = {
+                            "type": "channel",
+                            "common": {
+                                "name": state.val,
+                                "write": false,
+                                "read": true
+                            },
+                            "native": {}
+                        };
+                        this.setObject(ident, obj);
+                        sendstr = 'ain=' + encodeurl(dataid.val) + '&switchcmd=setname&name=' + encodeurl(state.val);
+                    } else {
+                        sendstr = 'ain=' + deviceId + '&switchcmd=setname&name=' + encodeurl(state.val);
+                        this.getForeignObject(this.namespace + '.' + device, (err, obj) => {
+                            if (obj) {
+                                obj.common.name = state.val;
+                                this.setObject(device, obj);
+                            }
+                        });
+                    }
+                    break;
+                case "sendorder":
+                    sendstr = state.val;
+                    break;
+                case "state":
+                    if (folder === 'simpleonoff') {
+                        dummy = 'setsimpleonoff&onoff=' + state.val;
+                    } else if (folder === 'switch') {
+                        dummy = (state.val) ? "setswitchon" : "setswitchoff";
+                    }
+                    if (dummy !== null) sendstr = 'ain=' + deviceId + '&switchcmd=' + dummy;
+                    break;
+                case "statetoogle":
+                    sendstr = 'ain=' + deviceId + '&switchcmd=setsimpleonoff&onoff=' + state.val;
+                    break;
+                case "boostactive":
+                    dummy = Math.floor(Date.now() / 1000);
+                    dummy = this.config.booster * 60 + dummy;
+                    sendstr = 'ain=' + deviceId + '&switchcmd=sethkrboost&endtimestamp=' + dummy;
+                    break;
+                case "boostactiveendtime":
+                    dummy = Math.floor(Date.now() / 1000)
+                    if (state.val > 0 && state.val < 1441) {
+                        dummy = state.val * 60 + dummy;
+                        sendstr = 'ain=' + deviceId + '&switchcmd=sethkrboost&endtimestamp=' + dummy;
+                    } else {
+                        this.log.info("Can not create a timestamp with value: " + state.val);
+                    }
+                case "windowopenactiv":
+                    dummy = Math.floor(Date.now() / 1000)
+                    dummy = this.config.open * 60 + dummy;
+                    sendstr = 'ain=' + deviceId + '&switchcmd=sethkrboost&endtimestamp=' + dummy;
+                    break;
+                case "windowopenactiveendtime":
+                    dummy = Math.floor(Date.now() / 1000)
+                    if (state.val > 0 && state.val < 1441) {
+                        dummy = state.val * 60 + dummy;
+                        sendstr = 'ain=' + deviceId + '&switchcmd=sethkrboost&endtimestamp=' + dummy;
+                    } else {
+                        this.log.info("Can not create a timestamp with value: " + state.val);
+                    }
+                    break;
+                case "toogle":
+                    deviceId = device.replace("TEMP_", "");
+                    sendstr  = 'ain=' + encodeurl(deviceId) + '&switchcmd=applytemplate';
+                    break;
+                default:
+                    sendstr = null;
+                    break;
+            }
+            this.log.info("command: " + sendstr);
+            if (sendstr !== null) {
+                this.Fritzbox("send", strcheck, sendstr);
+            }
+        } catch (e) {
+            this.log.error('Sendcommand: ' + e);
         }
     }
 
@@ -1263,506 +1351,26 @@ class Test extends utils.Adapter {
      * @param {string} id
      * @param {ioBroker.State | null | undefined} state
      */
-    async onStateChange(id, state) {
-        if (state) {
-            if (!state.ack) {
-//GeÃ¤ndert Anfang
-                const secsplit  = id.split('.')[id.split('.').length-2];
-                const lastsplit = id.split('.')[id.split('.').length-1];
-                const deviceId = id.split(".")[2];
-                if (secsplit === "Course") {
-                    this.courseactual[deviceId][lastsplit] = state.val;
-                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
-                    return;
-                }
-
-                if (secsplit === "Statistic") {
-                    const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
-                    if (devType.val > 100 && devType.val < 104) this.sendStaticRequest(deviceId, true);
-                    else this.sendStaticRequest(deviceId, false);
-                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
-                    return;
-                }
-
-                if (id.indexOf(".remote.") !== -1) {
-                    let nofor    = true;
-                    let action   = id.split(".")[4];
-                    let data     = {};
-                    let onoff    = "";
-                    let response = "";
-                    let rawData  = {};
-                    let dev      = "";
-                    if (["LastCourse", "Favorite", "Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
-                        const dataTemp = await this.getStateAsync(deviceId + ".snapshot.refState.tempUnit");
-                        switch (action) {
-                            case "fridgeTemp":
-                                rawData.data = { refState: { fridgeTemp: state.val, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "freezerTemp":
-                                rawData.data = { refState: { freezerTemp: state.val, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "expressMode":
-                                onoff = state.val ? "EXPRESS_ON" : "OFF";
-                                rawData.data = { refState: { expressMode: onoff, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "ecoFriendly":
-                                onoff = state.val ? "ON" : "OFF";
-                                rawData.data = { refState: { ecoFriendly: onoff, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "LastCourse":
-                                this.setCourse(id, deviceId, state);
-                                return;
-                                break;
-                            case "Favorite":
-                                this.setFavoriteCourse(deviceId);
-                                return;
-                                break;
-                            case "Monitoring":
-                                let folder = "nok";
-                                if (this.deviceJson[deviceId]["Config"]["targetRoot"] !== undefined) folder = this.deviceJson[deviceId]["Config"]["targetRoot"];
-                                if (folder === "nok") {
-                                    if (Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0] !== undefined) {
-                                        const wifi = Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0];
-                                        if (Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0] !== undefined) {
-                                            folder = Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0];
-                                        }
-                                    }
-                                }
-                                if (folder === "nok") {
-                                    this.log.warn("This device is not implemented");
-                                    this.setStateAsync(id, {val: false, ack: true});
-                                    return;
-                                }
-                                const objCount = await this.checkObject(this.namespace + "." + deviceId + ".snapshot." + folder);
-                                if (objCount === 0) {
-                                    this.log.error("Missing Folder: " + this.namespace + "." + deviceId + ".snapshot." + folder);
-                                    return;
-                                }
-                                if (state.val) {
-                                    if (this.monitoring) {
-                                        this.log.warn("Only one device is allowed. Actual Device: " + this.dev["devID"]);
-                                        await this.setStateAsync(id, {val: false, ack: true});
-                                    } else if (this.dev["devID"] === "NoDevice") {
-                                        this.monitoring = state.val;
-                                        this.dev["devID"] = deviceId;
-                                        this.log.info("Start device monitoring with DeviceID " + deviceId);
-                                        this.dev["Monitor"] = {};
-                                        this.deviceMonitor(deviceId, folder);
-                                        await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: deviceId, ack: true});
-                                        await this.setStateAsync("monitoringinfo.monitoring_active", {val: true, ack: true});
-                                    } else {
-                                        this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
-                                        await this.setStateAsync(id, {val: false, ack: true});
-                                    }
-                                } else { 
-                                    if (this.monitoring) {
-                                        if (this.dev["devID"] !== deviceId && this.dev["devID"] !== "NoDevice") {
-                                            this.log.warn("Please stop monitoring in device " + this.dev["devID"]);
-                                        } else if (this.dev["devID"] === deviceId) {
-                                            this.log.info("Stop monitoring device " + this.dev["devID"]);
-                                            this.dev["devID"] = "NoDevice";
-                                            this.dev["Monitor"] = {};
-                                            this.monitoring = state.val;
-                                            await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: "", ack: true});
-                                            await this.setStateAsync("monitoringinfo.monitoring_active", {val: false, ack: true});
-
-                                        } else {
-                                            this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
-                                        }
-                                    } else {
-                                        this.log.warn("Cannot find any current watch.");
-                                        this.dev["devID"] = "NoDevice";
-                                    }
-                                }
-                                return;
-                                break;
-                            case "WMDownload":
-                                if (this.CheckUndefined(state.val, "Course", deviceId)) {
-                                    this.InsertCourse(state.val, deviceId);
-                                    return;
-                                } else if (this.CheckUndefined(state.val, "SmartCourse", deviceId)) {
-                                    rawData = this.deviceControls[deviceId][action];
-                                    dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
-                                    let com = {};
-                                    com = this.deviceJson[deviceId]["SmartCourse"][state.val].function;
-                                    for(const val of com) {
-                                        this.courseactual[deviceId][val["value"]] = val["default"];
-                                    }
-                                    rawData.data[dev] = {
-                                        courseDownloadType: "COURSEDATA",
-                                        courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
-                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
-                                        downloadedCourseFL24inchBaseTitan: state.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                    this.InsertCourse(state.val, deviceId);
-                                } else {
-                                    this.log.warn("Command " + action + " and value " + state.val + " not found");
-                                    return;
-                                }
-                                break;
-                            case "WMStart":
-                                rawData = this.deviceControls[deviceId][action];
-                                dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
-                                const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
-                                if (JSON.stringify(WMState) === null || WMState === undefined) {
-                                     this.log.warn("Datapoint MWDownload is empty!");
-                                }
-                                if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
-                                     rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: WMState.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                } else if (this.CheckUndefined(WMState.val, "SmartCourse", deviceId)) {
-                                     rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][WMState.val].Course,
-                                        smartCourseFL24inchBaseTitan: WMState.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                } else {
-                                    this.log.warn("Command " + action + " and value " + state.val + " not found");
-                                    return;
-                                }
-                                break;
-                            default:
-                                this.log.info("Command " + action + " not found");
-                                return;
-                                break;
-                        }
-                        nofor = false;
-                        response = "";
-                    } else {
-                        rawData = this.deviceControls[deviceId][action];
-                    }
-
-                    data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//GeÃ¤ndert Ende
-                    if (action === "WMStop" || action === "WMOff") {
-                        data.ctrlKey = "WMControl";
-                    }
-
-                    this.log.debug(JSON.stringify(data));
-//GeÃ¤ndert Anfang
-                    if (data.dataSetList && nofor) {
-//GeÃ¤ndert Ende
-                        const type = Object.keys(data.dataSetList)[0];
-                        if (type) {
-                            for (const dataElement of Object.keys(data.dataSetList[type])) {
-                                if (!dataElement.startsWith("control")) {
-                                    const dataState = await this.getStateAsync(deviceId + ".snapshot." + type + "." + dataElement);
-                                    if (dataState) {
-                                        data.dataSetList[dataElement] = dataState.val;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (data.command && data.dataSetList) {
-                        this.log.debug(JSON.stringify(data));
-                        response = await this.sendCommandToDevice(deviceId, data);
-                    } else {
-                        rawData.value = rawData.value.replace("{Operation}", state.val ? "Start" : "Stop");
-                        data = {
-                            lgedmRoot: {
-                                deviceId: deviceId,
-                                workId: uuid.v4(),
-                                cmd: rawData.cmd,
-                                cmdOpt: rawData.cmdOpt,
-                                value: rawData.value,
-                                data: "",
-                            },
-                        };
-
-                        this.log.debug(JSON.stringify(data));
-                        response = await this.sendCommandToDevice(deviceId, data, true);
-                    }
-
-                    this.log.debug(JSON.stringify(response));
-
-                    if ((response && response.resultCode && response.resultCode !== "0000") || (response && response.lgedmRoot && response.lgedmRoot.returnCd !== "0000")) {
-                        this.log.error("Command not succesful");
-                        this.log.error(JSON.stringify(response));
-                    }
-                } else {
-                    const object = await this.getObjectAsync(id);
-                    const name = object.common.name;
-                    const data = { ctrlKey: "basicCtrl", command: "Set", dataKey: name, dataValue: state.val };
-                    if (name.indexOf(".operation") !== -1) {
-                        data.command = "Operation";
-                    }
-                    this.log.debug(JSON.stringify(data));
-                    const response = await this.sendCommandToDevice(deviceId, data);
-                    this.log.debug(JSON.stringify(response));
-                    if (response && response.resultCode !== "0000") {
-                        this.log.error("Command not succesful");
-                        this.log.error(JSON.stringify(response));
-                    }
-                }
-                this.refreshTimeout = setTimeout(async () => {
-                    await this.updateDevices();
-                }, 10 * 1000);
-            } else {
-                const idArray = id.split(".");
-                const lastElement = idArray.pop();
-                if (this.targetKeys[lastElement]) {
-                    this.targetKeys[lastElement].forEach((element) => {
-                        this.setState(idArray.join(".") + "." + element, state.val, true);
-                    });
-                }
-            }
-        }
-    }
-//Neu Anfang
-    async sendStaticRequest(device, fridge) {
-        try {
-            let statistic = null;
-            const period  = await this.getStateAsync(device + ".remote.Statistic.period");
-            let startD    = await this.getStateAsync(device + ".remote.Statistic.startDate");
-            let endD      = await this.getStateAsync(device + ".remote.Statistic.endDate");
-            let com       = "";
-            if (fridge) com = await this.getStateAsync(device + ".remote.Statistic.command");
-            let per = "day";
-            if (!this.checkdate(startD) || !this.checkdate(endD)) {
-                this.log.warn("Wrong date: Start: " + startD.val + " End: " + endD.val);
-            }
-            startD = this.checkdate(startD);
-            endD = this.checkdate(endD);
-            if (period === 1) per = "month";
-            else if (period === 2) per = "year";
-            this.log.debug("START " + startD);
-            this.log.debug("END " + endD);
-            this.log.debug(JSON.stringify(per));
-            let lasturl = "period=" + per + "&startDate=" + startD + "&endDate=" + endD;
-            if (!fridge) {
-                statistic = await this.getDeviceEnergy("service/laundry/" + device + "/energy-history?type=period&" + lasturl);
-            } else {
-                device = "service/fridge/" + device + "/";
-                if (com.val === 0)
-                    statistic = await this.getDeviceEnergy(device + "door-open-history?" + lasturl);
-                else if (com.val === 1)
-                    statistic = await this.getDeviceEnergy(device + "energy-history?" + lasturl);
-                else if (com.val === 2)
-                    statistic = await this.getDeviceEnergy(device + "water-consumption-history?" + lasturl);
-               else if (com.val === 3)
-                    statistic = await this.getDeviceEnergy(device + "active-power-saving?" + lasturl + "&lgTotalAverageInfo=&version=2");
-               else if (com.val === 4)
-                    statistic = await this.getDeviceEnergy(device + "fridge-water-history?" + lasturl);
-               else if (com.val === 5)
-                    statistic = await this.getDeviceEnergy(device + "fridge-water-history?self-care?startDate=" + startD + "&endDate=" + endD);
-            }
-            if (statistic !== undefined && statistic !== null) {
-                this.log.debug(JSON.stringify(statistic));
-                await this.setStateAsync(device + ".remote.Statistic.jsonResult", {
-                    val: JSON.stringify(statistic),
-                    ack: true
-                });
-            }
-//service/laundry/"+e.product.id+"/courses/used
-//service/laundry/"+e.product.id+"/courses/"+r+"/favorite - POST
-//service/laundry/"+c.product.id+"/courses/favorite  {"item":[{"courseId":"DUVET","date":"20211215110248","courseType":null,"param1":"","param2":null}]}
-//service/laundry/"+e.product.id+"/energy-history?type=period&period="+(n||"month")+"&startDate="+r+"&endDate="+t
-//service/laundry/"+e.product.id+"/energy-history?type=period&period=day&startDate=2021-12-01&endDate=2021-12-31
-//service/laundry/"+e.product.id+"/energy-history?type=count&count="+t+"&washerType="+(o=o||"M")+"&sorting="+r {"count":0,"power":0,"energyWater":0,"energyDetergent":0,"energySoftener":0,"powerWh":0,"periodicEnergyData":0,"item":[{"timestamp":"1639913066652","courseSpendPower":"1","smartCourseFL24inchBaseTitan":"NOT_SELECTED","periodicEnergyData":"1","temp":"TEMP_30","courseFL24inchBaseTitan":"COTTON","spin":"SPIN_1600","rinse":"RINSE_NORMAL","dryLevel":"NOT_SELECTED","soilWash":"SOILWASH_NORMAL"}]}
-//service/users/push/config
-//service/users/push/config?deviceId="+e.product.id
-//service/users/push/send
-//service/devices/"+e.product.id+"/config
-//service/devices/"+e.product.id+"/network-status
-//service/devices/"+e.product.id+"/firmware
-//service/devices/"+e.product.id
-//service/fridge/"+e.product.id+"/smart-care/config?type=activeCooling&version=1";
-//service/fridge/"+e.product.id+"/smart-care/config?type=smartSafety&version=2";
-//service/fridge/"+e.product.id+"/night-mode";
-//service/fridge/"+e.product.id+"/push/config/expired-food";
-        } catch (e) {
-            this.log.error("Error in sendStaticRequest: " + e);
-        }
-    }
-
-    checkdate(value) {
-        const onlynumber = /^-?[0-9]+$/;
-        if (value.val === undefined) return false;
-        let checkd = value.val.split(".");
-        if (Object.keys(checkd).length !== 3) return false;
-        if (checkd[0].toString().length !== 4  || !onlynumber.test(checkd[0])) return false;
-        if (!onlynumber.test(checkd[1])) return false;
-        if (checkd[1].toString().length !== 2) {
-            if (checkd[1].toString().length === 1) {
-                checkd[1] = "0" + checkd[1];
-            } else {
-                return false;
-            }
-        }
-        if (!onlynumber.test(checkd[2])) return false;
-        if (checkd[2].toString().length !== 2) {
-            if (checkd[2].toString().length === 1) {
-                checkd[2] = "0" + checkd[1];
-            } else {
-                return false;
-            }
-        }
-        return checkd[0] + "-" + checkd[1] + "-" + checkd[2]
-    }
-
-    async setFavoriteCourse(device) {
-        try {
-            const favcourse = await this.getDeviceEnergy("service/laundry/" + device + "/courses/favorite");
-            if (favcourse !== undefined && Object.keys(favcourse["item"]).length > 0) {
-                const isonline = await this.getStateAsync(device + ".snapshot.online");
-                if (isonline !== undefined) {
-                    if (isonline.val) {
-                        if (favcourse["item"]["courseId"] !== undefined) {
-                            await this.setStateAsync(device + ".remote.WMDownload", {val: favcourse["item"]["courseId"], ack: false});
-                            this.log.info("Set Favorite: " + (constants[this.lang + "Translation"][favcourse["item"]["courseId"]]) ? constants[this.lang + "Translation"][favcourse["item"]["courseId"]] : favcourse["item"]["courseId"]);
-                        }
-                    }
-                }
-            } else {
-                this.log.error("No favorite set.");
-            }
-        } catch (e) {
-            this.log.error("Error in setFavoriteCourse: " + e);
-        }
-    }
-
-    async setCourse(id, device, state) {
-        try {
-            this.getForeignObject(id, async (err, obj) => {
-                if (obj) {
-                    const rawstring = obj.common.desc;
-                    this.log.debug(JSON.stringify(rawstring) + " State: " + state.val);
-                    if (Array.isArray(rawstring) && Object.keys(rawstring).length > 0) {
-                        const rawselect = rawstring[state.val];
-                        this.log.debug(JSON.stringify(rawstring) + " State: " + state.val);
-                        if (rawselect.smartCourseFL24inchBaseTitan !== "NOT_SELECTED") {
-                            await this.setStateAsync(device + ".remote.WMDownload", {
-                                val: rawselect.smartCourseFL24inchBaseTitan,
-                                ack: false
-                            });
-                            await this.sleep(1000);
-                        } else {
-                            await this.setStateAsync(device + ".remote.WMDownload", {
-                                val: rawselect.courseFL24inchBaseTitan,
-                                ack: false
-                            });
-                            await this.sleep(1000);
-                        }
-                        Object.keys(rawselect).forEach( async (value) => {
-                            await this.getForeignObject(this.namespace + "." + device + ".remote.Course." + value, async (err, obj) => {
-                                if (obj) {
-                                    await this.setStateAsync(device + ".remote.Course." + value, {
-                                        val: rawselect[value],
-                                        ack: false
-                                    });
-                                    await this.sleep(200);
-                                }
-                            });
-                        });
-                    }
-                }
-            });
-        } catch (e) {
-            this.log.error("Error in setCourse: " + e);
-        }
-    }
-
-    InsertCourse(state, device) {
-        try {
-            Object.keys(this.courseJson[device]).forEach( async (value) => {
-                this.courseactual[device][value] = this.courseJson[device][value];
-                await this.setStateAsync(device + ".remote.Course." + value, {
-                    val: this.courseJson[device][value],
-                    ack: true
-                });
-            });
-            let com = {};
-            if (this.CheckUndefined(state, "Course", device)) {
-                com = this.deviceJson[device]["Course"][state].function;
-            } else if (this.CheckUndefined(state, "SmartCourse", device)) {
-                com = this.deviceJson[device]["SmartCourse"][state].function;
-            } else {
-                this.log.warn("Command " + action + " and value " + state.val + " not found");
+    onStateChange(id, state) {
+        if (state && !state.ack) {
+            const lastsplit   = id.split('.')[id.split('.').length-1];
+            const device      = id.split(".")[2];
+            const strcheck    = { username: this.config.username, sid: this.xmlvalue.sid };
+            if (lastsplit === "getsubscriptionstate") {
+                this.Fritzbox("dectstate", strcheck);
                 return;
             }
-            for(const val of com) {
-                this.getObject(device + ".remote.Course." + val["value"], async (err, obj) => {
-                    if (obj) {
-                        this.courseactual[device][val["value"]] = val["default"];
-                        await this.setStateAsync(device + ".remote.Course." + val["value"], {
-                            val: val["default"],
-                            ack: true
-                        });
-                    }
-                });
+            if (lastsplit === "cleanup") {
+                this.Fritzbox("cleanup", strcheck);
+                return;
             }
-        } catch (e) {
-            this.log.error("Error in InsertCourse: " + e);
-        }
-    }
-
-    CheckUndefined(value1, value2, value3) {
-        try {
-            if (this.deviceJson[value3][value2][value1]) return true;
-        } catch (e) {
-            return false;
-        }
-    }
-
-    async deviceMonitor(devId, folder) {
-        if (this.monitoring === false) return;
-        try {
-            const valuefolder = await this.getDeviceInfo(devId);
-            if (valuefolder !== undefined) {
-                this.log.debug(JSON.stringify(valuefolder["snapshot"][folder]));
-                if (JSON.stringify(valuefolder["snapshot"][folder]) === JSON.stringify(this.dev["Monitor"])) {
-                    this.log.debug("equal");
-                } else {
-                    this.log.debug("unequal");
-                    this.dev["Monitor"] = valuefolder["snapshot"][folder];
-                    for (const value of Object.keys(valuefolder["snapshot"][folder])) {
-                        await this.setStateAsync(devId + ".snapshot." + folder + "." + value, {
-                            val: valuefolder["snapshot"][folder][value],
-                            ack: true
-                        });
-                    }
-                }
-            } else {
-                await this.sleep(4000);
+            if (lastsplit === "startulesubscription") {
+                this.Fritzbox("send", strcheck, '&switchcmd=startulesubscription');
+                return;
             }
-            await this.setStateAsync("monitoringinfo.last_update", {
-                val: Math.floor(new Date()),
-                ack: true
-            });
-            await this.sleep(this.config.montime * 1000);
-            this.deviceMonitor(devId, folder);
-        } catch (e) {
-            this.log.error("deviceMonitor: " + JSON.stringify(valuefolder) + " - Error: " + e);
-            await this.sleep(this.config.montime * 1000);
-            this.deviceMonitor(devId, folder);
+            this.sendcommand(id, state);
         }
     }
-
-    checkObject(channel) {
-        return new Promise(resolve => {
-            this.getForeignObjects(channel + '.*',(err, obj) => {
-                if (err) {
-                    this.log.debug("Read Object: " + err);
-                    resolve(0);
-                } else {
-                    resolve(Object.keys(obj).length);
-                }
-            });
-        });
-    }
-//Neu Ende
 }
 
 if (require.main !== module) {
@@ -1770,8 +1378,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new Test(options);
+    module.exports = (options) => new Fritzboxdect(options);
 } else {
     // otherwise start the instance directly
-    new Test();
+    new Fritzboxdect();
 }
