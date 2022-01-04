@@ -20,14 +20,14 @@ const { URL } = require("url");
 const dateFormat = require('dateformat');
 //Neu Ende
 
-class LgThinq extends utils.Adapter {
+class Test extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "lg-thinq",
+            name: "test",
         });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
@@ -112,11 +112,11 @@ class LgThinq extends utils.Adapter {
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-//Bitte lˆschen Anfang
+//Bitte l√∂schen Anfang
                 //this.refreshTokenInterval = setInterval(() => {
                 //    this.refreshNewToken();
                 //}, this.session.expires_in * 1000);
-//Bitte lˆschen Ende
+//Bitte l√∂schen Ende
 //Neu Anfang
                 this.newrefreshTokenInterval(this.session.expires_in);
 //Neu Ende
@@ -781,7 +781,7 @@ class LgThinq extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht fÔøΩr alle verfÔøΩgbar",
+                            desc: "Umweltfreundlich. Nicht f√Ø¬ø¬Ωr alle verf√Ø¬ø¬Ωgbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -793,7 +793,7 @@ class LgThinq extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//Ge‰ndet Anfang
+//Ge√§ndet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -810,7 +810,7 @@ class LgThinq extends utils.Adapter {
                                 });
                             }
                         });
-//Ge‰ndet Ende
+//Ge√§ndet Ende
                 }
             }
         }
@@ -1277,7 +1277,7 @@ class LgThinq extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//Ge‰ndert Anfang
+//Ge√§ndert Anfang
                 const secsplit  = id.split('.')[id.split('.').length-2];
                 const lastsplit = id.split('.')[id.split('.').length-1];
                 const deviceId = id.split(".")[2];
@@ -1455,15 +1455,15 @@ class LgThinq extends utils.Adapter {
                     }
 
                     data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//Ge‰ndert Ende
+//Ge√§ndert Ende
                     if (action === "WMStop" || action === "WMOff") {
                         data.ctrlKey = "WMControl";
                     }
 
                     this.log.debug(JSON.stringify(data));
-//Ge‰ndert Anfang
+//Ge√§ndert Anfang
                     if (data.dataSetList && nofor) {
-//Ge‰ndert Ende
+//Ge√§ndert Ende
                         const type = Object.keys(data.dataSetList)[0];
                         if (type) {
                             for (const dataElement of Object.keys(data.dataSetList[type])) {
@@ -1824,8 +1824,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new LgThinq(options);
+    module.exports = (options) => new Test(options);
 } else {
     // otherwise start the instance directly
-    new LgThinq();
+    new Test();
 }
