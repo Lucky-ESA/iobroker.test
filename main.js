@@ -20,14 +20,14 @@ const { URL } = require("url");
 const dateFormat = require('dateformat');
 //Neu Ende
 
-class Test extends utils.Adapter {
+class LgThinq extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "test",
+            name: "lg-thinq",
         });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
@@ -112,11 +112,11 @@ class Test extends utils.Adapter {
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-//Bitte lÃ¶schen Anfang
+//Bitte löschen Anfang
                 //this.refreshTokenInterval = setInterval(() => {
                 //    this.refreshNewToken();
                 //}, this.session.expires_in * 1000);
-//Bitte lÃ¶schen Ende
+//Bitte löschen Ende
 //Neu Anfang
                 this.newrefreshTokenInterval(this.session.expires_in);
 //Neu Ende
@@ -781,7 +781,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht fÃ¯Â¿Â½r alle verfÃ¯Â¿Â½gbar",
+                            desc: "Umweltfreundlich. Nicht fï¿½r alle verfï¿½gbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -793,7 +793,7 @@ class Test extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//GeÃ¤ndet Anfang
+//Geändet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -810,7 +810,7 @@ class Test extends utils.Adapter {
                                 });
                             }
                         });
-//GeÃ¤ndet Ende
+//Geändet Ende
                 }
             }
         }
@@ -1277,249 +1277,253 @@ class Test extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//GeÃ¤ndert Anfang
-                const secsplit  = id.split('.')[id.split('.').length-2];
-                const lastsplit = id.split('.')[id.split('.').length-1];
-                const deviceId = id.split(".")[2];
-                if (secsplit === "Course") {
-                    this.courseactual[deviceId][lastsplit] = state.val;
-                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
-                    return;
-                }
+//Geändert Anfang
+                try {
+                    const secsplit  = id.split('.')[id.split('.').length-2];
+                    const lastsplit = id.split('.')[id.split('.').length-1];
+                    const deviceId = id.split(".")[2];
+                    if (secsplit === "Course") {
+                        this.courseactual[deviceId][lastsplit] = state.val;
+                        this.log.debug(JSON.stringify(this.courseactual[deviceId]));
+                        return;
+                    }
 
-                if (secsplit === "Statistic") {
-                    const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
-                    if (devType.val > 100 && devType.val < 104) this.sendStaticRequest(deviceId, true);
-                    else this.sendStaticRequest(deviceId, false);
-                    this.log.debug(JSON.stringify(this.courseactual[deviceId]));
-                    return;
-                }
+                    if (secsplit === "Statistic") {
+                        const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
+                        if (devType.val > 100 && devType.val < 104) this.sendStaticRequest(deviceId, true);
+                        else this.sendStaticRequest(deviceId, false);
+                        this.log.debug(JSON.stringify(this.courseactual[deviceId]));
+                        return;
+                    }
 
-                if (id.indexOf(".remote.") !== -1) {
-                    let nofor    = true;
-                    let action   = id.split(".")[4];
-                    let data     = {};
-                    let onoff    = "";
-                    let response = "";
-                    let rawData  = {};
-                    let dev      = "";
-                    if (["LastCourse", "Favorite", "Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
-                        const dataTemp = await this.getStateAsync(deviceId + ".snapshot.refState.tempUnit");
-                        switch (action) {
-                            case "fridgeTemp":
-                                rawData.data = { refState: { fridgeTemp: state.val, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "freezerTemp":
-                                rawData.data = { refState: { freezerTemp: state.val, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "expressMode":
-                                onoff = state.val ? "EXPRESS_ON" : "OFF";
-                                rawData.data = { refState: { expressMode: onoff, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "ecoFriendly":
-                                onoff = state.val ? "ON" : "OFF";
-                                rawData.data = { refState: { ecoFriendly: onoff, tempUnit: dataTemp.val } };
-                                action = "basicCtrl";
-                                rawData.command = "Set";
-                                break;
-                            case "LastCourse":
-                                this.setCourse(id, deviceId, state);
-                                return;
-                                break;
-                            case "Favorite":
-                                this.setFavoriteCourse(deviceId);
-                                return;
-                                break;
-                            case "Monitoring":
-                                let folder = "nok";
-                                if (this.deviceJson[deviceId]["Config"]["targetRoot"] !== undefined) folder = this.deviceJson[deviceId]["Config"]["targetRoot"];
-                                if (folder === "nok") {
-                                    if (Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0] !== undefined) {
-                                        const wifi = Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0];
-                                        if (Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0] !== undefined) {
-                                            folder = Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0];
+                    if (id.indexOf(".remote.") !== -1) {
+                        let nofor    = true;
+                        let action   = id.split(".")[4];
+                        let data     = {};
+                        let onoff    = "";
+                        let response = "";
+                        let rawData  = {};
+                        let dev      = "";
+                        if (["LastCourse", "Favorite", "Monitoring", "WMStart", "WMDownload", "fridgeTemp", "freezerTemp", "expressMode", "ecoFriendly"].includes(action)) {
+                            const dataTemp = await this.getStateAsync(deviceId + ".snapshot.refState.tempUnit");
+                            switch (action) {
+                                case "fridgeTemp":
+                                    rawData.data = { refState: { fridgeTemp: state.val, tempUnit: dataTemp.val } };
+                                    action = "basicCtrl";
+                                    rawData.command = "Set";
+                                    break;
+                                case "freezerTemp":
+                                    rawData.data = { refState: { freezerTemp: state.val, tempUnit: dataTemp.val } };
+                                    action = "basicCtrl";
+                                    rawData.command = "Set";
+                                    break;
+                                case "expressMode":
+                                    onoff = state.val ? "EXPRESS_ON" : "OFF";
+                                    rawData.data = { refState: { expressMode: onoff, tempUnit: dataTemp.val } };
+                                    action = "basicCtrl";
+                                    rawData.command = "Set";
+                                    break;
+                                case "ecoFriendly":
+                                    onoff = state.val ? "ON" : "OFF";
+                                    rawData.data = { refState: { ecoFriendly: onoff, tempUnit: dataTemp.val } };
+                                    action = "basicCtrl";
+                                    rawData.command = "Set";
+                                    break;
+                                case "LastCourse":
+                                    this.setCourse(id, deviceId, state);
+                                    return;
+                                    break;
+                                case "Favorite":
+                                    this.setFavoriteCourse(deviceId);
+                                    return;
+                                    break;
+                                case "Monitoring":
+                                    let folder = "nok";
+                                    if (this.CheckUndefined("targetRoot", "Config", deviceId)) folder = this.deviceJson[deviceId]["Config"]["targetRoot"];
+                                    if (folder === "nok") {
+                                        if (Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0] !== undefined) {
+                                            const wifi = Object.keys(this.deviceJson[deviceId]["ControlWifi"])[0];
+                                            if (Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0] !== undefined) {
+                                                folder = Object.keys(this.deviceJson[deviceId]["ControlWifi"][wifi]["data"])[0];
+                                            }
                                         }
                                     }
-                                }
-                                if (folder === "nok") {
-                                    this.log.warn("This device is not implemented");
-                                    this.setStateAsync(id, {val: false, ack: true});
-                                    return;
-                                }
-                                const objCount = await this.checkObject(this.namespace + "." + deviceId + ".snapshot." + folder);
-                                if (objCount === 0) {
-                                    this.log.error("Missing Folder: " + this.namespace + "." + deviceId + ".snapshot." + folder);
-                                    return;
-                                }
-                                if (state.val) {
-                                    if (this.monitoring) {
-                                        this.log.warn("Only one device is allowed. Actual Device: " + this.dev["devID"]);
-                                        await this.setStateAsync(id, {val: false, ack: true});
-                                    } else if (this.dev["devID"] === "NoDevice") {
-                                        this.monitoring = state.val;
-                                        this.dev["devID"] = deviceId;
-                                        this.log.info("Start device monitoring with DeviceID " + deviceId);
-                                        this.dev["Monitor"] = {};
-                                        this.deviceMonitor(deviceId, folder);
-                                        await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: deviceId, ack: true});
-                                        await this.setStateAsync("monitoringinfo.monitoring_active", {val: true, ack: true});
-                                    } else {
-                                        this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
-                                        await this.setStateAsync(id, {val: false, ack: true});
+                                    if (folder === "nok") {
+                                        this.log.warn("This device is not implemented");
+                                        this.setStateAsync(id, {val: false, ack: true});
+                                        return;
                                     }
-                                } else { 
-                                    if (this.monitoring) {
-                                        if (this.dev["devID"] !== deviceId && this.dev["devID"] !== "NoDevice") {
-                                            this.log.warn("Please stop monitoring in device " + this.dev["devID"]);
-                                        } else if (this.dev["devID"] === deviceId) {
-                                            this.log.info("Stop monitoring device " + this.dev["devID"]);
-                                            this.dev["devID"] = "NoDevice";
-                                            this.dev["Monitor"] = {};
+                                    const objCount = await this.checkObject(this.namespace + "." + deviceId + ".snapshot." + folder);
+                                    if (objCount === 0) {
+                                        this.log.error("Missing Folder: " + this.namespace + "." + deviceId + ".snapshot." + folder);
+                                        return;
+                                    }
+                                    if (state.val) {
+                                        if (this.monitoring) {
+                                            this.log.warn("Only one device is allowed. Actual Device: " + this.dev["devID"]);
+                                            await this.setStateAsync(id, {val: false, ack: true});
+                                        } else if (this.dev["devID"] === "NoDevice") {
                                             this.monitoring = state.val;
-                                            await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: "", ack: true});
-                                            await this.setStateAsync("monitoringinfo.monitoring_active", {val: false, ack: true});
-
+                                            this.dev["devID"] = deviceId;
+                                            this.log.info("Start device monitoring with DeviceID " + deviceId);
+                                            this.dev["Monitor"] = {};
+                                            this.deviceMonitor(deviceId, folder);
+                                            await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: deviceId, ack: true});
+                                            await this.setStateAsync("monitoringinfo.monitoring_active", {val: true, ack: true});
                                         } else {
                                             this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
+                                            await this.setStateAsync(id, {val: false, ack: true});
                                         }
-                                    } else {
-                                        this.log.warn("Cannot find any current watch.");
-                                        this.dev["devID"] = "NoDevice";
+                                    } else { 
+                                        if (this.monitoring) {
+                                            if (this.dev["devID"] !== deviceId && this.dev["devID"] !== "NoDevice") {
+                                                this.log.warn("Please stop monitoring in device " + this.dev["devID"]);
+                                            } else if (this.dev["devID"] === deviceId) {
+                                                this.log.info("Stop monitoring device " + this.dev["devID"]);
+                                                this.dev["devID"] = "NoDevice";
+                                                this.dev["Monitor"] = {};
+                                                this.monitoring = state.val;
+                                                await this.setStateAsync("monitoringinfo.monitoring_deviceID", {val: "", ack: true});
+                                                await this.setStateAsync("monitoringinfo.monitoring_active", {val: false, ack: true});
+                                            } else {
+                                                this.log.warn("Unknown error! Variable: " + this.monitoring + " DeviceId: " + deviceId + " Device: " + this.dev["devID"]);
+                                            }
+                                        } else {
+                                            this.log.warn("Cannot find any current watch.");
+                                            this.dev["devID"] = "NoDevice";
+                                        }
                                     }
-                                }
-                                return;
-                                break;
-                            case "WMDownload":
-                                if (this.CheckUndefined(state.val, "Course", deviceId)) {
-                                    this.InsertCourse(state.val, deviceId);
                                     return;
-                                } else if (this.CheckUndefined(state.val, "SmartCourse", deviceId)) {
+                                    break;
+                                case "WMDownload":
+                                    if (this.CheckUndefined(state.val, "Course", deviceId)) {
+                                        this.InsertCourse(state.val, deviceId);
+                                        return;
+                                    } else if (this.CheckUndefined(state.val, "SmartCourse", deviceId)) {
+                                        rawData = this.deviceControls[deviceId][action];
+                                        dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
+                                        let com = {};
+                                        com = this.deviceJson[deviceId]["SmartCourse"][state.val].function;
+                                        for(const val of com) {
+                                            this.courseactual[deviceId][val["value"]] = val["default"];
+                                        }
+                                        rawData.data[dev] = {
+                                            courseDownloadType: "COURSEDATA",
+                                            courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
+                                            courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
+                                            downloadedCourseFL24inchBaseTitan: state.val,
+                                            ...this.courseactual[deviceId],
+                                        };
+                                        this.InsertCourse(state.val, deviceId);
+                                    } else {
+                                        this.log.warn("Command " + action + " and value " + state.val + " not found");
+                                        return;
+                                    }
+                                    break;
+                                case "WMStart":
                                     rawData = this.deviceControls[deviceId][action];
                                     dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
-                                    let com = {};
-                                    com = this.deviceJson[deviceId]["SmartCourse"][state.val].function;
-                                    for(const val of com) {
-                                        this.courseactual[deviceId][val["value"]] = val["default"];
+                                    const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
+                                    if (JSON.stringify(WMState) === null || WMState === undefined) {
+                                        this.log.warn("Datapoint MWDownload is empty!");
                                     }
-                                    rawData.data[dev] = {
-                                        courseDownloadType: "COURSEDATA",
-                                        courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
-                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
-                                        downloadedCourseFL24inchBaseTitan: state.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                    this.InsertCourse(state.val, deviceId);
-                                } else {
-                                    this.log.warn("Command " + action + " and value " + state.val + " not found");
+                                    if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
+                                        rawData.data[dev] = {
+                                            courseFL24inchBaseTitan: WMState.val,
+                                            ...this.courseactual[deviceId],
+                                        };
+                                    } else if (this.CheckUndefined(WMState.val, "SmartCourse", deviceId)) {
+                                        rawData.data[dev] = {
+                                            courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][WMState.val].Course,
+                                            smartCourseFL24inchBaseTitan: WMState.val,
+                                            ...this.courseactual[deviceId],
+                                        };
+                                    } else {
+                                        this.log.warn("Command " + action + " and value " + state.val + " not found");
+                                        return;
+                                    }
+                                    break;
+                                default:
+                                    this.log.info("Command " + action + " not found");
                                     return;
-                                }
-                                break;
-                            case "WMStart":
-                                rawData = this.deviceControls[deviceId][action];
-                                dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
-                                const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
-                                if (JSON.stringify(WMState) === null || WMState === undefined) {
-                                     this.log.warn("Datapoint MWDownload is empty!");
-                                }
-                                if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
-                                     rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: WMState.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                } else if (this.CheckUndefined(WMState.val, "SmartCourse", deviceId)) {
-                                     rawData.data[dev] = {
-                                        courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][WMState.val].Course,
-                                        smartCourseFL24inchBaseTitan: WMState.val,
-                                        ...this.courseactual[deviceId],
-                                    };
-                                } else {
-                                    this.log.warn("Command " + action + " and value " + state.val + " not found");
-                                    return;
-                                }
-                                break;
-                            default:
-                                this.log.info("Command " + action + " not found");
-                                return;
-                                break;
+                                    break;
+                            }
+                            nofor = false;
+                            response = "";
+                        } else {
+                            rawData = this.deviceControls[deviceId][action];
                         }
-                        nofor = false;
-                        response = "";
-                    } else {
-                        rawData = this.deviceControls[deviceId][action];
-                    }
 
-                    data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
-//GeÃ¤ndert Ende
-                    if (action === "WMStop" || action === "WMOff") {
-                        data.ctrlKey = "WMControl";
-                    }
+                        data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
 
-                    this.log.debug(JSON.stringify(data));
-//GeÃ¤ndert Anfang
-                    if (data.dataSetList && nofor) {
-//GeÃ¤ndert Ende
-                        const type = Object.keys(data.dataSetList)[0];
-                        if (type) {
-                            for (const dataElement of Object.keys(data.dataSetList[type])) {
-                                if (!dataElement.startsWith("control")) {
-                                    const dataState = await this.getStateAsync(deviceId + ".snapshot." + type + "." + dataElement);
-                                    if (dataState) {
-                                        data.dataSetList[dataElement] = dataState.val;
+//Geändert Ende
+                        if (action === "WMStop" || action === "WMOff") {
+                            data.ctrlKey = "WMControl";
+                        }
+
+                        this.log.debug(JSON.stringify(data));
+//Geändert Anfang
+                        if (data.dataSetList && nofor) {
+//Geändert Ende
+                            const type = Object.keys(data.dataSetList)[0];
+                            if (type) {
+                                for (const dataElement of Object.keys(data.dataSetList[type])) {
+                                    if (!dataElement.startsWith("control")) {
+                                        const dataState = await this.getStateAsync(deviceId + ".snapshot." + type + "." + dataElement);
+                                        if (dataState) {
+                                            data.dataSetList[dataElement] = dataState.val;
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    if (data.command && data.dataSetList) {
-                        this.log.debug(JSON.stringify(data));
-                        response = await this.sendCommandToDevice(deviceId, data);
+                        if (data.command && data.dataSetList) {
+                            this.log.debug(JSON.stringify(data));
+                            response = await this.sendCommandToDevice(deviceId, data);
+                        } else {
+                            rawData.value = rawData.value.replace("{Operation}", state.val ? "Start" : "Stop");
+                            data = {
+                                lgedmRoot: {
+                                    deviceId: deviceId,
+                                    workId: uuid.v4(),
+                                    cmd: rawData.cmd,
+                                    cmdOpt: rawData.cmdOpt,
+                                    value: rawData.value,
+                                    data: "",
+                                },
+                            };
+
+                            this.log.debug(JSON.stringify(data));
+                            response = await this.sendCommandToDevice(deviceId, data, true);
+                        }
+
+                        this.log.debug(JSON.stringify(response));
+
+                        if ((response && response.resultCode && response.resultCode !== "0000") || (response && response.lgedmRoot && response.lgedmRoot.returnCd !== "0000")) {
+                            this.log.error("Command not succesful");
+                            this.log.error(JSON.stringify(response));
+                        }
                     } else {
-                        rawData.value = rawData.value.replace("{Operation}", state.val ? "Start" : "Stop");
-                        data = {
-                            lgedmRoot: {
-                                deviceId: deviceId,
-                                workId: uuid.v4(),
-                                cmd: rawData.cmd,
-                                cmdOpt: rawData.cmdOpt,
-                                value: rawData.value,
-                                data: "",
-                            },
-                        };
-
+                        const object = await this.getObjectAsync(id);
+                        const name = object.common.name;
+                        const data = { ctrlKey: "basicCtrl", command: "Set", dataKey: name, dataValue: state.val };
+                        if (name.indexOf(".operation") !== -1) {
+                            data.command = "Operation";
+                        }
                         this.log.debug(JSON.stringify(data));
-                        response = await this.sendCommandToDevice(deviceId, data, true);
+                        const response = await this.sendCommandToDevice(deviceId, data);
+                        this.log.debug(JSON.stringify(response));
+                        if (response && response.resultCode !== "0000") {
+                            this.log.error("Command not succesful");
+                            this.log.error(JSON.stringify(response));
+                        }
                     }
-
-                    this.log.debug(JSON.stringify(response));
-
-                    if ((response && response.resultCode && response.resultCode !== "0000") || (response && response.lgedmRoot && response.lgedmRoot.returnCd !== "0000")) {
-                        this.log.error("Command not succesful");
-                        this.log.error(JSON.stringify(response));
-                    }
-                } else {
-                    const object = await this.getObjectAsync(id);
-                    const name = object.common.name;
-                    const data = { ctrlKey: "basicCtrl", command: "Set", dataKey: name, dataValue: state.val };
-                    if (name.indexOf(".operation") !== -1) {
-                        data.command = "Operation";
-                    }
-                    this.log.debug(JSON.stringify(data));
-                    const response = await this.sendCommandToDevice(deviceId, data);
-                    this.log.debug(JSON.stringify(response));
-                    if (response && response.resultCode !== "0000") {
-                        this.log.error("Command not succesful");
-                        this.log.error(JSON.stringify(response));
-                    }
+                    this.refreshTimeout = setTimeout(async () => {
+                        await this.updateDevices();
+                    }, 10 * 1000);
+                } catch (e) {
+                    this.log.error("onStateChange: " + e);
                 }
-                this.refreshTimeout = setTimeout(async () => {
-                    await this.updateDevices();
-                }, 10 * 1000);
             } else {
                 const idArray = id.split(".");
                 const lastElement = idArray.pop();
@@ -1824,8 +1828,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new Test(options);
+    module.exports = (options) => new LgThinq(options);
 } else {
     // otherwise start the instance directly
-    new Test();
+    new LgThinq();
 }
