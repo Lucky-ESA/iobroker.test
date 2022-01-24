@@ -1192,7 +1192,10 @@ class Test extends utils.Adapter {
                     this.getObject(path + state, async (err, obj) => {
                         if (obj) {
                             const common = obj.common;
-                            common.states = {};
+//Bug Empty States Anfang
+                            //common.states = {};
+                            let commons= {};
+//Bug Empty States Ende
                             let valueObject = deviceModel["Value"][state]["option"];
                             if (deviceModel["Value"][state]["value_mapping"]) {
                                 valueObject = deviceModel["Value"][state]["value_mapping"];
@@ -1206,11 +1209,17 @@ class Test extends utils.Adapter {
                                     values.forEach((value) => {
                                         const content = valueObject[value];
                                         if (typeof content === "string") {
-                                            common.states[value] = content.replace("@", "");
+                                            commons[value] = content.replace("@", "");
                                         }
                                     });
                                 }
                             }
+//Bug Empty States Anfang
+                            if (Object.keys(commons).length > 0) {
+                                common.states = {};
+                                common.states = commons;
+                            };
+//Bug States Ende
                             if (!obj) {
                                 // @ts-ignore
                                 await this.setObjectNotExistsAsync(path + state, {
