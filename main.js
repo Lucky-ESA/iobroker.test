@@ -112,11 +112,11 @@ class Test extends utils.Adapter {
                 this.log.debug(JSON.stringify(this.session));
                 this.setState("info.connection", true, true);
                 this.log.info("Login successful");
-//Bitte l√∂schen Anfang
+//Bitte lˆschen Anfang
                 //this.refreshTokenInterval = setInterval(() => {
                 //    this.refreshNewToken();
                 //}, this.session.expires_in * 1000);
-//Bitte l√∂schen Ende
+//Bitte lˆschen Ende
 //Neu Anfang
                 this.newrefreshTokenInterval(this.session.expires_in);
 //Neu Ende
@@ -781,7 +781,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht f√Ø¬ø¬Ωr alle verf√Ø¬ø¬Ωgbar",
+                            desc: "Umweltfreundlich. Nicht fÔøΩr alle verfÔøΩgbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -793,7 +793,7 @@ class Test extends utils.Adapter {
                 } else {
                     controlWifi &&
                         Object.keys(controlWifi).forEach((control) => {
-//Ge√§ndet Anfang
+//Ge‰ndet Anfang
                             if (control === "WMDownload") {
                                 this.createremote(device.deviceId, control, deviceModel);
                             } else {
@@ -810,7 +810,7 @@ class Test extends utils.Adapter {
                                 });
                             }
                         });
-//Ge√§ndet Ende
+//Ge‰ndet Ende
                 }
             }
         }
@@ -826,10 +826,10 @@ class Test extends utils.Adapter {
             if (control === "WMDownload") {
                 this.lastDeviceCourse(devicedp);
                 Object.keys(course["Course"]).forEach( async (value) => {
-                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
+                    states[value] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
                 Object.keys(course["SmartCourse"]).forEach( async (value) => {
-                    states[value] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : "Unbekannt";
+                    states[value] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
                 this.setObjectNotExists(devicedp + ".remote.Course", {
                     type: "channel",
@@ -877,10 +877,10 @@ class Test extends utils.Adapter {
                                 common["type"] = "number";
                                 common["def"] = 0;
                             } else {
-                                states[map] = (constants[this.lang + "Translation"][map]) ? constants[this.lang + "Translation"][map] : states[map]["value"];
+                                states[map] = (constants[this.lang + "Translation"][map] !== undefined) ? constants[this.lang + "Translation"][map] : states[map]["value"];
                             }
                         });
-                        common["name"] = (constants[this.lang + "Translation"][value]) ? constants[this.lang + "Translation"][value] : value;
+                        common["name"] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : value;
                         if (Object.keys(states).length > 0) common["states"] = states;
                         this.courseJson[devicedp][value] = dev[value];
                         this.courseactual[devicedp][value] = dev[value];
@@ -1049,11 +1049,11 @@ class Test extends utils.Adapter {
                         }
                         if (keys === "courseFL24inchBaseTitan") {
                             if (name === null)
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
                         }
                         if (keys === "smartCourseFL24inchBaseTitan") {
                             if (datacourse["item"][items][keys] !== "NOT_SELECTED")
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]]) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
                         }
                     });
                     states[count] += " - " +  name;
@@ -1120,6 +1120,7 @@ class Test extends utils.Adapter {
                         }
 //Bug Empty States Anfang
                         //common.states = {};
+                        let commons= {};
 //Bug Empty States Ende
                         if (deviceModel["MonitoringValue"][state]["targetKey"]) {
                             this.targetKeys[state] = [];
@@ -1132,16 +1133,16 @@ class Test extends utils.Adapter {
 //Bug States Anfang
                         if (state === "courseFL24inchBaseTitan") {
                             Object.keys(deviceModel["Course"]).forEach( async (key) => {
-                                common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                                commons[key] = (constants[this.lang + "Translation"][key] !== undefined) ? constants[this.lang + "Translation"][key] : "Unbekannt";
                             });
-                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                            commons["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"] !== undefined) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
                         }
                         if (state === "smartCourseFL24inchBaseTitan" ||
                             state === "downloadedCourseFL24inchBaseTitan") {
                                 Object.keys(deviceModel["SmartCourse"]).forEach( async (key) => {
-                                    common.states[key] = (constants[this.lang + "Translation"][key]) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                                    commons[key] = (constants[this.lang + "Translation"][key] !== undefined) ? constants[this.lang + "Translation"][key] : "Unbekannt";
                                 });
-                                common.states["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"]) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                                commons["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"] !== undefined) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
                         }
                         if (deviceModel["MonitoringValue"][state]["valueMapping"]) {
                             if (deviceModel["MonitoringValue"][state]["valueMapping"].max) {
@@ -1153,17 +1154,22 @@ class Test extends utils.Adapter {
                                     if (deviceModel["MonitoringValue"][state]["valueMapping"][value].label !== undefined) {
                                         const valueMap = deviceModel["MonitoringValue"][state]["valueMapping"][value];
                                         if (onlynumber.test(value)) {
-                                            common.states[valueMap.index] = valueMap.label;
+
+                                            commons[valueMap.index] = valueMap.label;
                                         } else {
-                                            common.states[value] = valueMap.index;
+                                            commons[value] = valueMap.index;
                                         }
                                     } else {
-                                        common.states[value] = value;
+                                        commons[value] = value;
                                     }
-//Bug States Ende
                                 });
                             }
                         }
+                        if (Object.keys(commons).length > 0) {
+                            common.states = {};
+                            common.states = commons;
+                        };
+//Bug States Ende
                         if (!obj) {
                             // @ts-ignore
                             await this.setObjectNotExistsAsync(path + state, {
@@ -1277,7 +1283,7 @@ class Test extends utils.Adapter {
     async onStateChange(id, state) {
         if (state) {
             if (!state.ack) {
-//Ge√§ndert Anfang
+//Ge‰ndert Anfang
                 try {
                     const secsplit  = id.split('.')[id.split('.').length-2];
                     const lastsplit = id.split('.')[id.split('.').length-1];
@@ -1456,15 +1462,15 @@ class Test extends utils.Adapter {
 
                         data = { ctrlKey: action, command: rawData.command, dataSetList: rawData.data };
 
-//Ge√§ndert Ende
+//Ge‰ndert Ende
                         if (action === "WMStop" || action === "WMOff") {
                             data.ctrlKey = "WMControl";
                         }
 
                         this.log.debug(JSON.stringify(data));
-//Ge√§ndert Anfang
+//Ge‰ndert Anfang
                         if (data.dataSetList && nofor) {
-//Ge√§ndert Ende
+//Ge‰ndert Ende
                             const type = Object.keys(data.dataSetList)[0];
                             if (type) {
                                 for (const dataElement of Object.keys(data.dataSetList[type])) {
@@ -1649,7 +1655,7 @@ class Test extends utils.Adapter {
                     if (isonline.val) {
                         if (favcourse["item"]["courseId"] !== undefined) {
                             await this.setStateAsync(device + ".remote.WMDownload", {val: favcourse["item"]["courseId"], ack: false});
-                            this.log.info("Set Favorite: " + (constants[this.lang + "Translation"][favcourse["item"]["courseId"]]) ? constants[this.lang + "Translation"][favcourse["item"]["courseId"]] : favcourse["item"]["courseId"]);
+                            this.log.info("Set Favorite: " + (constants[this.lang + "Translation"][favcourse["item"]["courseId"]] !== undefined) ? constants[this.lang + "Translation"][favcourse["item"]["courseId"]] : favcourse["item"]["courseId"]);
                         }
                     }
                 }
