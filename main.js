@@ -20,14 +20,14 @@ const { URL } = require("url");
 const dateFormat = require('dateformat');
 //Neu Ende
 
-class Test extends utils.Adapter {
+class LgThinq extends utils.Adapter {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
     constructor(options) {
         super({
             ...options,
-            name: "test",
+            name: "lg-thinq",
         });
         this.on("ready", this.onReady.bind(this));
         this.on("stateChange", this.onStateChange.bind(this));
@@ -101,10 +101,10 @@ class Test extends utils.Adapter {
 
         if (this.gateway) {
             this.lgeapi_url = `https://${this.gateway.countryCode.toLowerCase()}.lgeapi.com/`;
-
             this.session = await this.login(this.config.user, this.config.password).catch((error) => {
                 this.log.error(error);
             });
+
             if (this.session && this.session.access_token) {
 //Vor Ablauf erneuern Anfang
                 this.session.expires_in = this.session.expires_in - 60;
@@ -124,7 +124,13 @@ class Test extends utils.Adapter {
                 this.defaultHeaders["x-user-no"] = this.userNumber;
                 this.defaultHeaders["x-emp-token"] = this.session.access_token;
                 const listDevices = await this.getListDevices();
-
+//Neu Anfang
+                if (listDevices === "TERMS") {
+                    this.terms = await this.Term(this.config.user, this.config.password).catch((error) => {
+                        this.log.error(error);
+                    });
+                }
+//Neu Ende
                 this.log.info("Found: " + listDevices.length + " devices");
 //Neu Anfang
                 await this.setObjectNotExistsAsync("monitoringinfo", {
@@ -208,6 +214,11 @@ class Test extends utils.Adapter {
             this.refreshNewToken();
         }, times * 1000);
     }
+
+    async Term(username, password) {
+
+
+    }
 //Neu Ende
     async updateDevices() {
         const listDevices = await this.getListDevices().catch((error) => {
@@ -263,7 +274,7 @@ class Test extends utils.Adapter {
                     this.log.error("Double-check your country in configuration");
                 }
                 if (code === "MS.001.16") {
-                    this.log.error("Please check your app and accept new agreements");
+                    this.log.error("Your password is blocked. Please unlock your password.");
                 }
                 return;
             });
@@ -415,7 +426,9 @@ class Test extends utils.Adapter {
                 this.log.error(error);
             });
         this.log.debug(JSON.stringify(resp));
-        if (this.session) {
+//Geändert Anfang
+        if (this.session && resp.access_token) {
+//Geändert Ende
             this.session.access_token = resp.access_token;
             this.defaultHeaders["x-emp-token"] = this.session.access_token;
 //Neu set new interval Anfang
@@ -587,7 +600,10 @@ class Test extends utils.Adapter {
             this.homes = await this.getListHomes();
             if (!this.homes) {
                 this.log.error("Could not receive homes. Please check your app and accept new agreements");
-                return [];
+//Geändert Anfang
+                //return [];
+                return "TERMS";
+//Geändert Ende
             }
             this.extractKeys(this, "homes", this.homes);
         }
@@ -651,14 +667,16 @@ class Test extends utils.Adapter {
                 return;
             });
         if (deviceModel) {
-            await this.setObjectNotExistsAsync(device.deviceId + ".remote", {
-                type: "channel",
-                common: {
-                    name: "remote control device",
-                    role: "state",
-                },
-                native: {},
-            });
+//Löschen Anfang
+//            await this.setObjectNotExistsAsync(device.deviceId + ".remote", {
+//                type: "channel",
+//                common: {
+//                    name: "remote control device",
+//                    role: "state",
+//                },
+//                native: {},
+//            });
+//Löschen Ende
             if (deviceModel["ControlWifi"]) {
                 this.log.debug(JSON.stringify(deviceModel["ControlWifi"]));
                 let controlWifi = deviceModel["ControlWifi"];
@@ -679,7 +697,7 @@ class Test extends utils.Adapter {
                     native: {},
                 });
 //Neu Anfang
-                await this.setObjectNotExists(device.deviceId + ".remote.Monitoring", {
+                await this.setObjectNotExistsAsync(device.deviceId + ".remote.Monitoring", {
                     type: "state",
                     common: {
                         name: constants[this.lang + "Translation"]["MON_DEVICE"],
@@ -702,7 +720,7 @@ class Test extends utils.Adapter {
 //Neu Anfang
                     this.createStatistic(device.deviceId, 101);
 //Neu Ende
-                    await this.setObjectNotExists(device.deviceId + ".remote.fridgeTemp", {
+                    await this.setObjectNotExistsAsync(device.deviceId + ".remote.fridgeTemp", {
                         type: "state",
                         common: {
                             name: "fridgeTemp_C",
@@ -727,7 +745,7 @@ class Test extends utils.Adapter {
                         },
                         native: {},
                     });
-                    await this.setObjectNotExists(device.deviceId + ".remote.freezerTemp", {
+                    await this.setObjectNotExistsAsync(device.deviceId + ".remote.freezerTemp", {
                         type: "state",
                         common: {
                             name: "freezerTemp_C",
@@ -756,7 +774,7 @@ class Test extends utils.Adapter {
                         },
                         native: {},
                     });
-                    await this.setObjectNotExists(device.deviceId + ".remote.expressMode", {
+                    await this.setObjectNotExistsAsync(device.deviceId + ".remote.expressMode", {
                         type: "state",
                         common: {
                             name: "expressMode",
@@ -773,7 +791,7 @@ class Test extends utils.Adapter {
                         },
                         native: {},
                     });
-                    await this.setObjectNotExists(device.deviceId + ".remote.ecoFriendly", {
+                    await this.setObjectNotExistsAsync(device.deviceId + ".remote.ecoFriendly", {
                         type: "state",
                         common: {
                             name: "ecoFriendly",
@@ -781,7 +799,7 @@ class Test extends utils.Adapter {
                             write: true,
                             read: true,
                             role: "state",
-                            desc: "Umweltfreundlich. Nicht fï¿½r alle verfï¿½gbar",
+                            desc: "Umweltfreundlich. Nicht fÃ¼r alle verfÃ¼gbar",
                             def: false,
                             states: {
                                 true: "ON",
@@ -817,20 +835,31 @@ class Test extends utils.Adapter {
         return deviceModel;
     }
 //Neu Anfang
-    createremote(devicedp, control, course) {
+    async createremote(devicedp, control, course) {
         try {
             let states = {};
             let dev    = "";
+            let db     = null;
             this.courseJson[devicedp] = {};
             this.courseactual[devicedp] = {};
             if (control === "WMDownload") {
                 this.lastDeviceCourse(devicedp);
+                let common = {};
+                common = {
+                    name: "WMDownload",
+                    type: "string",
+                    role: "value",
+                    write: true,
+                    read: true,
+                };
                 Object.keys(course["Course"]).forEach( async (value) => {
                     states[value] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
                 Object.keys(course["SmartCourse"]).forEach( async (value) => {
                     states[value] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : "Unbekannt";
                 });
+                if (Object.keys(states).length > 0) common["states"] = states;
+                db = await this.createDataPoint(devicedp + ".remote.WMDownload", common);
                 this.setObjectNotExists(devicedp + ".remote.Course", {
                     type: "channel",
                     common: {
@@ -858,45 +887,86 @@ class Test extends utils.Adapter {
                     this.log.error(error);
                 });
 
-                let common = {};
                 dev = Object.keys(this.deviceControls[devicedp]["WMDownload"]["data"])[0];
                 dev = this.deviceControls[devicedp]["WMDownload"]["data"][dev];
                 Object.keys(dev).forEach( async (value) => {
-                    common = {
-                        name: "unbekannt",
-                        type: "string",
-                        role: "value",
-                        write: true,
-                        read: true,
-                    }
-                    states = {};
-                    if (course["MonitoringValue"][value]) {
-                        Object.keys(course["MonitoringValue"][value]["valueMapping"]).forEach( async (map) => {
-                            if (map === "min" || map === "max") {
-                                common[map] = (course["MonitoringValue"][value]["valueMapping"][map] !== 3) ? course["MonitoringValue"][value]["valueMapping"][map] : 0;
-                                common["type"] = "number";
-                                common["def"] = 0;
-                            } else {
-                                states[map] = (constants[this.lang + "Translation"][map] !== undefined) ? constants[this.lang + "Translation"][map] : states[map]["value"];
-                            }
-                        });
-                        common["name"] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : value;
-                        if (Object.keys(states).length > 0) common["states"] = states;
-                        this.courseJson[devicedp][value] = dev[value];
-                        this.courseactual[devicedp][value] = dev[value];
-                        await this.setObjectNotExistsAsync(devicedp + ".remote.Course." + value, {
-                            type: "state",
-                            common: common,
-                            native: {},
-                        }).catch((error) => {
-                            this.log.error(error);
-                        });
+                    try {
+                        states = {};
+                        common = {
+                            name: "unbekannt",
+                            type: "string",
+                            role: "value",
+                            write: true,
+                            read: true,
+                        };
+                        states = {};
+                        if (course["MonitoringValue"][value] !== undefined) {
+                            Object.keys(course["MonitoringValue"][value]["valueMapping"]).forEach((map) => {
+                                try {
+                                    if (map === "min") {
+                                        common[map] = (course["MonitoringValue"][value]["valueMapping"][map] !== 3 && course["MonitoringValue"][value]["valueMapping"][map] !== 30) ? course["MonitoringValue"][value]["valueMapping"][map] : 0;
+                                        common["type"] = "number";
+                                        common["def"] = 0;
+                                    } else if (map === "max") {
+                                        if (value === "moreLessTime") {
+                                            common[map] = 200;
+                                        } else {
+                                            common[map] = (course["MonitoringValue"][value]["valueMapping"][map] !== undefined) ? course["MonitoringValue"][value]["valueMapping"][map] : 0;
+                                        }
+                                        common["type"] = "number";
+                                        common["def"] = 0;
+                                    } else {
+                                        states[map] = (constants[this.lang + "Translation"][map] !== undefined) ? constants[this.lang + "Translation"][map] : states[map]["value"];
+                                    }
+
+                                } catch (e) {
+                                    this.log.error("Foreach valueMapping: " + e + " - " + value + " - " + devicedp);
+                                }
+                            });
+                            common["name"] = (constants[this.lang + "Translation"][value] !== undefined) ? constants[this.lang + "Translation"][value] : value;
+                            if (Object.keys(states).length > 0) common["states"] = states;
+                            this.courseJson[devicedp][value] = dev[value];
+                            this.courseactual[devicedp][value] = dev[value];
+                            db = await this.createDataPoint(devicedp + ".remote.Course." + value, common);
+                        }
+                    } catch (e) {
+                        this.log.error("Foreach dev: " + e + " - " + value + " - " + devicedp);
                     }
                 });
             }
         } catch (e) {
             this.log.error("Error in valueinfolder: " + e);
         }
+    }
+
+    /**
+     * update/create DataPoint!
+     * @param ident DataPoint ID
+     * @param name DataPoint Name
+     */
+    createDataPoint(ident, common) {
+        return new Promise(resolve => {
+            this.getForeignObject(this.namespace + '.' + ident, async (err, obj) => {
+                if (!obj) {
+                    this.setObjectNotExistsAsync(ident, {
+                        type: "state",
+                        common: common,
+                        native: {},
+                    })
+                    .then(() => {
+                    resolve(true);
+                    })
+                    .catch((error) => {
+                        this.log.error(error);
+                    });
+                } else {
+                    delete obj["common"];
+                    obj["common"] = common;
+                    const res = await this.extendObjectAsync(ident, obj);
+                    resolve(true);
+                }
+            });
+        });
     }
 
     async createStatistic(devicedp, fridge) {
@@ -1022,6 +1092,10 @@ class Test extends utils.Adapter {
         try {
             const devtype = await this.getStateAsync(devId + ".deviceType");
             const datacourse = await this.getDeviceEnergy("service/laundry/" + devId + "/energy-history?type=count&count=10&washerType=" + devtype + "&sorting=Y");
+            this.log.debug("datacourse: " + JSON.stringify(datacourse) + " - devID: " + devId);
+            if (datacourse["item"] === undefined) {
+                return;
+            }
             if (datacourse !== undefined && Object.keys(datacourse["item"]).length > 0) {
                 let states = {};
                 let count  = 0;
@@ -1039,21 +1113,33 @@ class Test extends utils.Adapter {
                     ++count;
                     name = null;
                     Object.keys(datacourse["item"][items]).forEach( async (keys) => {
-                        if (keys === "timestamp") {
-                            if (this.lang === "de") {
-                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-MM-dd HH:MM:ss");
-                            } else {
-                                startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-mm-dd h:MM:ss  TT");
+                        try {
+                            if (keys === "timestamp") {
+                                if (this.lang === "de") {
+                                    startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-MM-dd HH:MM:ss");
+                                } else {
+                                    startdate = dateFormat(parseFloat(datacourse["item"][items][keys]), "yyyy-mm-dd h:MM:ss  TT");
+                                }
+                                states[count] = startdate;
                             }
-                            states[count] = startdate;
-                        }
-                        if (keys === "courseFL24inchBaseTitan") {
-                            if (name === null)
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
-                        }
-                        if (keys === "smartCourseFL24inchBaseTitan") {
-                            if (datacourse["item"][items][keys] !== "NOT_SELECTED")
-                                name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                            if (keys === "courseFL24inchBaseTitan") {
+                                if (name === null)
+                                    name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                            }
+                            if (keys === "smartCourseFL24inchBaseTitan") {
+                                if (datacourse["item"][items][keys] !== "NOT_SELECTED")
+                                    name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                            }
+                            if (keys === "courseDryer24inchBase") {
+                                if (name === null)
+                                    name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                            }
+                            if (keys === "smartCourseDryer24inchBase") {
+                                if (datacourse["item"][items][keys] !== "NOT_SELECTED")
+                                    name = (constants[this.lang + "Translation"][datacourse["item"][items][keys]] !== undefined) ? constants[this.lang + "Translation"][datacourse["item"][items][keys]] : datacourse["item"][items][keys];
+                            }
+                        } catch (e) {
+                            this.log.error("datacourse: " + e + " - " + keys);
                         }
                     });
                     states[count] += " - " +  name;
@@ -1137,6 +1223,19 @@ class Test extends utils.Adapter {
                             });
                             commons["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"] !== undefined) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
                         }
+                        if (state === "courseDryer24inchBase") {
+                            Object.keys(deviceModel["Course"]).forEach( async (key) => {
+                                commons[key] = (constants[this.lang + "Translation"][key] !== undefined) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                            });
+                            commons["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"] !== undefined) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                        }
+                        if (state === "smartCourseDryer24inchBase" ||
+                            state === "downloadedCourseDryer24inchBase") {
+                                Object.keys(deviceModel["SmartCourse"]).forEach( async (key) => {
+                                    commons[key] = (constants[this.lang + "Translation"][key] !== undefined) ? constants[this.lang + "Translation"][key] : "Unbekannt";
+                                });
+                                commons["NOT_SELECTED"] = (constants[this.lang + "Translation"]["NOT_SELECTED"] !== undefined) ? constants[this.lang + "Translation"]["NOT_SELECTED"] : 0;
+                        }
                         if (state === "smartCourseFL24inchBaseTitan" ||
                             state === "downloadedCourseFL24inchBaseTitan") {
                                 Object.keys(deviceModel["SmartCourse"]).forEach( async (key) => {
@@ -1147,14 +1246,18 @@ class Test extends utils.Adapter {
                         if (deviceModel["MonitoringValue"][state]["valueMapping"]) {
                             if (deviceModel["MonitoringValue"][state]["valueMapping"].max) {
                                 common.min = 0; // deviceModel["MonitoringValue"][state]["valueMapping"].min; //reseverdhour has wrong value
-                                common.max = deviceModel["MonitoringValue"][state]["valueMapping"].max;
+                                    if (state === "moreLessTime") {
+                                        common.max = 200;
+                                    } else {
+                                        common.max = deviceModel["MonitoringValue"][state]["valueMapping"].max;
+                                    }
+                                common.def = 0;
                             } else {
                                 const values = Object.keys(deviceModel["MonitoringValue"][state]["valueMapping"]);
                                 values.forEach((value) => {
                                     if (deviceModel["MonitoringValue"][state]["valueMapping"][value].label !== undefined) {
                                         const valueMap = deviceModel["MonitoringValue"][state]["valueMapping"][value];
                                         if (onlynumber.test(value)) {
-
                                             commons[valueMap.index] = valueMap.label;
                                         } else {
                                             commons[value] = valueMap.index;
@@ -1166,7 +1269,7 @@ class Test extends utils.Adapter {
                             }
                         }
                         if (Object.keys(commons).length > 0) {
-                            common.states = {};
+                            if (common["states"] !== undefined) delete common.states
                             common.states = commons;
                         };
 //Bug States Ende
@@ -1203,7 +1306,12 @@ class Test extends utils.Adapter {
                             if (valueObject) {
                                 if (valueObject.max) {
                                     common.min = 0; // deviceModel["MonitoringValue"][state]["valueMapping"].min; //reseverdhour has wrong value
-                                    common.max = valueObject.max;
+                                    if (state === "moreLessTime") {
+                                        common.max = 200;
+                                    } else {
+                                        common.max = valueObject.max;
+                                    }
+                                    common.def = 0;
                                 } else {
                                     const values = Object.keys(valueObject);
                                     values.forEach((value) => {
@@ -1216,7 +1324,7 @@ class Test extends utils.Adapter {
                             }
 //Bug Empty States Anfang
                             if (Object.keys(commons).length > 0) {
-                                common.states = {};
+                                if (common["states"] !== undefined) delete common.states
                                 common.states = commons;
                             };
 //Bug States Ende
@@ -1422,13 +1530,24 @@ class Test extends utils.Adapter {
                                         for(const val of com) {
                                             this.courseactual[deviceId][val["value"]] = val["default"];
                                         }
-                                        rawData.data[dev] = {
-                                            courseDownloadType: "COURSEDATA",
-                                            courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
-                                            courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
-                                            downloadedCourseFL24inchBaseTitan: state.val,
-                                            ...this.courseactual[deviceId],
-                                        };
+                                        const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
+                                        if (devType.val === 202) {
+                                            rawData.data[dev] = {
+                                                courseDownloadType: "COURSEDATA",
+                                                courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
+                                                courseDryer24inchBase: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
+                                                downloadedCourseDryer24inchBase: state.val,
+                                                ...this.courseactual[deviceId],
+                                            };
+                                        } else {
+                                            rawData.data[dev] = {
+                                                courseDownloadType: "COURSEDATA",
+                                                courseDownloadDataLength: Object.keys(this.courseactual[deviceId]).length + 2,
+                                                courseFL24inchBaseTitan: this.deviceJson[deviceId]["SmartCourse"][state.val].Course,
+                                                downloadedCourseFL24inchBaseTitan: state.val,
+                                                ...this.courseactual[deviceId],
+                                            };
+                                        }
                                         this.InsertCourse(state.val, deviceId);
                                     } else {
                                         this.log.warn("Command " + action + " and value " + state.val + " not found");
@@ -1439,10 +1558,21 @@ class Test extends utils.Adapter {
                                     rawData = this.deviceControls[deviceId][action];
                                     dev = Object.keys(this.deviceControls[deviceId][action]["data"])[0];
                                     const WMState = await this.getStateAsync(deviceId + ".remote.WMDownload");
+                                    const devType = await this.checkObject(this.namespace + "." + deviceId + ".deviceType");
                                     if (JSON.stringify(WMState) === null || WMState === undefined) {
-                                        this.log.warn("Datapoint MWDownload is empty!");
+                                        this.log.warn("Datapoint WMDownload is empty!");
                                     }
-                                    if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
+                                    if (this.CheckUndefined(WMState.val, "Course", deviceId) && devType.val === 202) {
+                                        rawData.data[dev] = {
+                                            courseDryer24inchBase: WMState.val,
+                                            ...this.courseactual[deviceId],
+                                        };
+                                    } else if (this.CheckUndefined(WMState.val, "SmartCourse", deviceId) && devType.val === 202) {
+                                        rawData.data[dev] = {
+                                            courseDryer24inchBase: WMState.val,
+                                            ...this.courseactual[deviceId],
+                                        };
+                                    } else if (this.CheckUndefined(WMState.val, "Course", deviceId)) {
                                         rawData.data[dev] = {
                                             courseFL24inchBaseTitan: WMState.val,
                                             ...this.courseactual[deviceId],
@@ -1724,16 +1854,17 @@ class Test extends utils.Adapter {
     }
 
     /**
-     * Set program into course folder when change datapoint MWDownload (Only Washer & Dryer Thinq2)
-     * @param {string} state => Input datapoint MWDownload
+     * Set program into course folder when change datapoint WMDownload (Only Washer & Dryer Thinq2)
+     * @param {string} state => Input datapoint WMDownload
      * @param {string} device => deviceid
      */
     InsertCourse(state, device) {
         try {
+            const onlynumber = /^-?[0-9]+$/;
             Object.keys(this.courseJson[device]).forEach( async (value) => {
                 this.courseactual[device][value] = this.courseJson[device][value];
                 await this.setStateAsync(device + ".remote.Course." + value, {
-                    val: this.courseJson[device][value],
+                    val: (onlynumber.test(this.courseJson[device][value])) ? parseFloat(this.courseJson[device][value]) : this.courseJson[device][value],
                     ack: true
                 });
             });
@@ -1751,7 +1882,7 @@ class Test extends utils.Adapter {
                     if (obj) {
                         this.courseactual[device][val["value"]] = val["default"];
                         await this.setStateAsync(device + ".remote.Course." + val["value"], {
-                            val: val["default"],
+                            val: (onlynumber.test(val["default"])) ? parseFloat(val["default"]) : val["default"],
                             ack: true
                         });
                     }
@@ -1843,8 +1974,8 @@ if (require.main !== module) {
     /**
      * @param {Partial<utils.AdapterOptions>} [options={}]
      */
-    module.exports = (options) => new Test(options);
+    module.exports = (options) => new LgThinq(options);
 } else {
     // otherwise start the instance directly
-    new Test();
+    new LgThinq();
 }
